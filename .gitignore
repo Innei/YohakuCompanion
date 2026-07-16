@@ -1,0 +1,24 @@
+.DS_Store
+
+xcuserdata
+*.xcuserstate
+buildServer.json
+
+DerivedData/
+build/
+dist/
+*.app
+*.xcarchive
+*.dmg
+
+.env
+.env.*
+!.env.example
+*.p8
+*.p12
+*.pem
+*.key
+
+# Discord's proprietary SDK is downloaded from the pinned, checksum-verified
+# archive by scripts/setup_discord_sdk.sh.
+Vendor/Discord

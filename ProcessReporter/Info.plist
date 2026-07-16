@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>Yohaku Companion</string>
+	<key>CFBundleName</key>
+	<string>Yohaku Companion</string>
+	<key>LSMultipleInstancesProhibited</key>
+	<true/>
+	<key>NSAccessibilityUsageDescription</key>
+	<string>Yohaku Companion reads the current window title only when you enable Window Titles. It does not read window titles while this setting is off.</string>
+	<key>NSApplicationRequiresAccessToUserApplicationFolder</key>
+	<true/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>$(SPARKLE_FEED_URL)</string>
+	<key>SUPublicEDKey</key>
+	<string>$(SPARKLE_PUBLIC_ED_KEY)</string>
+</dict>
+</plist>

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Release Yohaku Companion"
+  short_description: "Prepare and publish signed Yohaku Companion releases"
+  default_prompt: "Use $release-yohaku-companion to prepare release notes, validate the app, and publish the next tagged release."

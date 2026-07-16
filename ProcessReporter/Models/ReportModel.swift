@@ -1,0 +1,170 @@
+//
+//  ReportModel.swift
+//  ProcessReporter
+//
+//  Created by Innei on 2025/4/8.
+//
+import AppKit
+import Foundation
+import SwiftData
+
+@Model
+class ReportModel {
+    @Attribute(.unique)
+    var id: UUID
+
+    var processName: String?
+    var windowTitle: String?
+    var timeStamp: Date
+
+    // MARK: - Media Info
+
+    var artist: String?
+    var mediaName: String?
+    var mediaProcessName: String?
+    var mediaDuration: Double?
+    var mediaElapsedTime: Double?
+
+    // Store as Data instead of base64 string for efficiency
+    var mediaImageData: Data?
+
+    @Transient
+    var mediaImage: NSImage? {
+        guard let data = mediaImageData else { return nil }
+        return NSImage(data: data)
+    }
+
+    @Transient
+    var mediaInfoRaw: MediaInfo? = nil
+    @Transient
+    var processInfoRaw: FocusedWindowInfo? = nil
+    @Transient
+    var sourceProcessApplicationIdentifier: String? = nil
+    @Transient
+    var sourceMediaApplicationIdentifier: String? = nil
+
+    // Store integrations as Data for better performance
+    @Attribute
+    var integrationsData: Data?
+
+    // External interface for integrations
+    var integrations: [String] {
+        get {
+            switch decodedSyncPayload {
+            case .modern(let payload):
+                return payload.deliveryResults
+                    .filter { $0.status == .succeeded }
+                    .map(\.displayName)
+            case .legacy(let integrations):
+                return integrations
+            case .unreadable:
+                return []
+            }
+        }
+        set {
+            integrationsData = try? JSONEncoder().encode(newValue)
+        }
+    }
+
+    var decodedSyncPayload: DecodedSyncPayload {
+        SyncEventPayloadCodec.decode(integrationsData)
+    }
+
+    var storedSyncEventPayload: StoredSyncEventPayload? {
+        guard case .modern(let payload) = decodedSyncPayload else { return nil }
+        return payload
+    }
+
+    func setStoredSyncEventPayload(_ payload: StoredSyncEventPayload) throws {
+        integrationsData = try SyncEventPayloadCodec.encode(payload)
+    }
+
+    func setMediaInfo(_ mediaInfo: MediaInfo) {
+        sourceMediaApplicationIdentifier = mediaInfo.applicationIdentifier
+        artist = mediaInfo.artist
+        mediaName = mediaInfo.name
+        mediaProcessName = mediaInfo.processName
+        mediaDuration = mediaInfo.duration
+        mediaElapsedTime = mediaInfo.elapsedTime
+
+        // Artwork is intentionally not copied into every history row. The live
+        // menu reads it from MediaInfo, while repeated database blobs could grow
+        // a 5,000-row history to gigabytes. Keep the persisted field for schema
+        // compatibility with existing stores.
+        mediaImageData = nil
+
+        mediaInfoRaw = mediaInfo
+    }
+
+    func setProcessInfo(_ processInfo: FocusedWindowInfo) {
+        sourceProcessApplicationIdentifier = processInfo.applicationIdentifier
+        processName = processInfo.appName
+        windowTitle = processInfo.title
+        processInfoRaw = processInfo
+    }
+
+    init(
+        windowInfo: FocusedWindowInfo?,
+        integrations: [String],
+        mediaInfo: MediaInfo?,
+        timeStamp: Date = .now
+    ) {
+        id = UUID()
+        processName = nil
+        windowTitle = nil
+        processInfoRaw = windowInfo
+
+        self.timeStamp = timeStamp
+        integrationsData = try? JSONEncoder().encode(integrations)
+        mediaInfoRaw = mediaInfo
+
+        if let mediaInfo = mediaInfo {
+            setMediaInfo(mediaInfo)
+        }
+        if let windowInfo = windowInfo {
+            setProcessInfo(windowInfo)
+        }
+    }
+}
+
+// Computed properties for frequently accessed data
+extension ReportModel {
+    var hasMediaInfo: Bool {
+        mediaName != nil || artist != nil
+    }
+
+    var hasProcessInfo: Bool {
+        processName != nil
+    }
+
+    var displayName: String {
+        if let mediaName = mediaName, !mediaName.isEmpty {
+            return mediaName
+        }
+        return processName ?? "Unknown"
+    }
+
+    var subtitle: String? {
+        if let artist = artist, !artist.isEmpty {
+            return artist
+        }
+        return windowTitle
+    }
+}
+
+#if DEBUG
+    extension ReportModel: CustomDebugStringConvertible {
+        var debugDescription: String {
+            return """
+                ReportModel:
+                  Process: \(processName ?? "N/A")
+                  Window: \(windowTitle ?? "N/A")
+                  Media: \(mediaName ?? "N/A") by \(artist ?? "N/A")
+                  Media Process: \(mediaProcessName ?? "N/A")
+                  Duration: \(mediaDuration?.description ?? "N/A") / \(mediaElapsedTime?.description ?? "N/A")
+                  Timestamp: \(timeStamp)
+                  Integrations: \(integrations.joined(separator: ", "))
+                """
+        }
+    }
+#endif
