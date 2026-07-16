@@ -2,7 +2,7 @@
 
 This document describes the internal contracts used to capture, sanitize, deliver, and audit Presence in Yohaku Companion. These types are application-internal; Yohaku Companion does not expose a binary plugin ABI.
 
-The Xcode project, target, scheme, source directory, and several compatibility protocols retain the internal name `ProcessReporter`. This is an implementation detail, not a product or persistence identity. Release and Debug builds use Yohaku Companion bundle identifiers, and bundle-derived Application Support and credential namespaces do not inspect or migrate the separately installed ProcessReporter application.
+The Xcode project, target, scheme, module, and source directory use `YohakuCompanion`. Several legacy compatibility protocols retain their existing identifiers, but those identifiers are not a product or persistence identity. Release and Debug builds use Yohaku Companion bundle identifiers, and bundle-derived Application Support and credential namespaces do not inspect or migrate the separately installed ProcessReporter application.
 
 ## Reporter extensions
 
@@ -120,7 +120,7 @@ Provider-specific error text may be used for immediate diagnostics, but History 
 
 `CompanionPairingClient.claimAndInstall(pairingCode:deviceName:connectionStore:)` preflights protected storage and `GET /companion/capabilities` before consuming the one-time code. Minimum client version, Presence schema, and `liveDesk` availability must negotiate successfully before it posts the code without an Authorization header. It then validates the returned device scope and sequence and immediately installs the plaintext Token without returning it to UI code.
 
-`CompanionLiveDeskCoordinator` starts only after local opt-in and successful capability negotiation. The current vertical slice publishes a privacy-sanitized application context with `media: null`, sends a complete snapshot on application activation and the negotiated heartbeat interval, coalesces concurrent refresh requests, and uses ordered clear operations for sleep, screen lock, and shutdown. One `CompanionPresenceAuthorityRegistry` entry retains the same serialized writer and durable sequencer across sleep/wake renegotiation for a given server and device, so an immediate wake snapshot cannot overtake or reuse sequence state from an in-flight clear.
+`CompanionLiveDeskCoordinator` starts only after local opt-in and successful capability negotiation. It publishes a complete privacy-sanitized application and media snapshot on semantic source changes and the negotiated heartbeat interval. Media capture is gated by the negotiated `mediaTimeline` capability, uses a bounded fresh lookup, preserves `null` for unavailable positions, and never exposes PID, executable path, bundle identifier, or artwork. The coordinator coalesces concurrent refresh requests and uses ordered clear operations for sleep, screen lock, and shutdown. One `CompanionPresenceAuthorityRegistry` entry retains the same serialized writer and durable sequencer across sleep/wake renegotiation for a given server and device, so an immediate wake snapshot cannot overtake or reuse sequence state from an in-flight clear.
 
 A mutation error with `COMPANION_SCHEMA_UNSUPPORTED` or `COMPANION_FEATURE_UNAVAILABLE`, or an HTTP 426 whose error envelope cannot be decoded, invalidates the current writer. The coordinator cancels its heartbeat, discards that authority, and fetches capabilities again before sending another snapshot.
 

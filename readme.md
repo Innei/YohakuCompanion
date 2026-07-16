@@ -1,72 +1,113 @@
-# Yohaku Companion
+<p align="center">
+  <img src="YohakuCompanion/Assets.xcassets/AppIcon.appiconset/icon_256x256@2x.png" width="128" height="128" alt="Yohaku Companion application icon">
+</p>
 
-[![macOS](https://img.shields.io/badge/macOS-15%2B-blue.svg)](https://www.apple.com/macos/)
-[![Swift](https://img.shields.io/badge/Swift-5.9%2B-orange.svg)](https://swift.org/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+<h1 align="center">Yohaku Companion</h1>
 
-Yohaku Companion is the native macOS companion for Yohaku. The current client publishes a privacy-sanitized snapshot of the foreground application to Yohaku Live Desk. Optional Bridges can also use application and media Presence when configured.
+<p align="center">
+  A privacy-first macOS companion that brings your current application and media presence to Yohaku.
+</p>
 
-It is not a productivity tracker: it does not calculate work time, rankings, focus scores, or behavioral analytics.
+<p align="center">
+  <a href="https://github.com/Innei/YohakuCompanion/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Innei/YohakuCompanion?display_name=tag&sort=semver"></a>
+  <img alt="macOS 15 or later" src="https://img.shields.io/badge/macOS-15%2B-111111?logo=apple">
+  <img alt="Apple Silicon" src="https://img.shields.io/badge/architecture-arm64-111111">
+  <img alt="Swift" src="https://img.shields.io/badge/Swift-5.9%2B-F05138?logo=swift&logoColor=white">
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-2ea44f"></a>
+</p>
 
-## Product model
+Yohaku Companion is the native desktop companion for [Yohaku](https://github.com/Innei/Yohaku). It pairs a Mac directly with a Companion-enabled Mix Space Core, shows the exact sanitized state that may become public, and starts Live Desk only after explicit consent.
 
-```text
-Application Source ──> Privacy Rules ──> Sanitized Application ──> Yohaku Live Desk
-                                               │
-                                               ▼
-Media Source ───────> Bridge Sanitizer ──> Optional Bridge Snapshot
-                                               ├──> MixSpace
-                                               ├──> Slack
-                                               └──> Discord
-            │
-            ▼
-Optional public application icon URL
-            │
-            ▼
-S3-compatible Application Icon Hosting
+It is the macOS successor to ProcessReporter, with a new product identity and a first-party Yohaku connection. It is not a productivity tracker: it does not calculate work time, rankings, focus scores, or behavioral analytics.
+
+> [!NOTE]
+> Live Desk uses Companion Protocol v2 directly. It does not require the legacy Mix Space cloud function. The MixSpace HTTP Bridge remains available only for sites that still use the older Shiro activity endpoint.
+
+## How it works
+
+```mermaid
+flowchart LR
+  Sources["Foreground application<br/>Window title<br/>Media playback"] --> Privacy["Source controls<br/>Privacy rules<br/>Aliases"]
+  Privacy --> Preview["Exact sanitized preview"]
+  Preview -->|"Explicit consent"| Core["Mix Space Core<br/>Companion Protocol v2"]
+  Core --> Desk["Yohaku Live Desk"]
+  Privacy --> Bridges["Optional Bridges<br/>MixSpace · Slack · Discord"]
 ```
 
-S3-compatible storage is asset infrastructure, not a Presence destination. A hosting failure may degrade an icon enhancement, but it must not block destinations that can receive Presence without a public icon URL.
+Live Desk is a short-lived current-state projection, not an activity timeline. Each update replaces the previous snapshot; pause, sleep, screen lock, device removal, and application termination trigger a best-effort clear, while the server lease provides the final expiry boundary.
 
-## Features
+## What can be shared
 
-- Menu-bar-first Current Presence and destination health.
-- Application and optional window-title sources for Live Desk; media remains Bridge-only in the current client.
-- Global privacy defaults plus per-application Share, Hide, and Alias rules.
-- First-party Yohaku connection and Live Desk publishing.
-- Optional Slack and Discord Presence bridges.
-- Optional S3-compatible application icon hosting with a local URL cache.
-- Local Sync History containing sanitized snapshots and normalized delivery results.
-- Protected destination credentials with explicit replacement and removal: Keychain for stable signed builds, or a permissions-restricted local journal for ad-hoc builds.
-- Versioned settings migration and credential-free settings backup.
+| Source | Public projection | Default and privacy boundary |
+| --- | --- | --- |
+| Application | Sanitized display name and optional activity label | Controlled by the Applications source and per-application Share, Hide, or Alias rules |
+| Window title | Current sanitized title | Off by default; read only while Window Titles is enabled and Accessibility permission is granted |
+| Media | Title, artist, album, media kind, and sanitized player name | Controlled independently by the Media Playback source and media privacy rules |
+| Playback | Playing or paused state, duration, sampled position, rate, and stable session ID | Published only when Core advertises the negotiated `mediaTimeline` capability |
+
+Raw bundle identifiers, executable paths, process IDs, credentials, artwork, screenshots, and keystrokes are never part of the Live Desk payload.
+
+## Privacy model
+
+- Pairing installs a revocable device credential but leaves Live Desk disabled.
+- Enabling Live Desk requires reviewing the current sanitized preview and explicitly confirming it.
+- A privacy or source change invalidates the previous preview and forces a fresh consent boundary.
+- Device Tokens are restricted to protected storage and the HTTP `Authorization` header.
+- Live Desk, local Sync History, and optional Bridges receive sanitized domain values rather than raw capture objects.
+- Yohaku Companion uses its own bundle identifiers, Application Support directory, database, and credential namespace. It never reads, copies, migrates, or deletes ProcessReporter data.
 
 ## Requirements
 
-- Apple Silicon Mac (`arm64`). Intel Macs are not supported.
+- Apple Silicon Mac. Intel Macs are not supported.
 - macOS 15.0 or later.
-- Accessibility permission only when window titles are enabled.
-- The optional media helper when a supported Bridge uses media Presence.
-- A paired Yohaku connection for Live Desk, or at least one configured Bridge for Bridge delivery.
+- A current Mix Space Core with Companion Live Desk enabled.
+- A Yohaku deployment with its Live Desk module enabled.
+- Accessibility permission only when window-title sharing is enabled.
 
-## Installation
+The built-in media provider works without additional software. On macOS 15.4 or later, the optional [media-control](https://github.com/ungive/media-control) helper can enrich process and artwork metadata.
 
-1. Download the latest build from [Releases](https://github.com/Innei/YohakuCompanion/releases).
-2. Open the disk image and move Yohaku Companion to Applications.
-3. Launch Yohaku Companion and complete the privacy and Yohaku setup flow.
-4. Pair this Mac with Yohaku, then review the sanitized preview before enabling Live Desk. Optional Bridges can be configured separately.
+## Install and pair
 
-## Settings
+1. Download the current DMG from [GitHub Releases](https://github.com/Innei/YohakuCompanion/releases/latest), then move **Yohaku Companion** to Applications.
+2. Enable Live Desk in Core and restart it:
 
-| Section | Purpose |
+   ```bash
+   COMPANION_LIVE_DESK_ENABLED=true
+   ```
+
+3. Enable the module in Yohaku theme configuration:
+
+   ```json
+   {
+     "module": {
+       "liveDesk": {
+         "enable": true
+       }
+     }
+   }
+   ```
+
+4. Open the **Companion** page in Mix Space Admin and generate a one-time pairing code.
+5. In Yohaku Companion, open **Settings → Yohaku**, enter the public site URL, a device name, and the pairing code.
+6. Review **Current Sanitized Preview**, then explicitly enable Live Desk.
+
+Pairing codes expire after ten minutes and can be used only once.
+
+> [!IMPORTANT]
+> Consult the release notes for the artifact's signing status. Until Developer ID credentials are enabled, releases are ad-hoc signed and macOS may require **Open Anyway** on first launch. An update may also require Accessibility permission to be granted again because an ad-hoc identity is not stable across builds.
+
+## Optional Bridges and local audit
+
+The first-party Yohaku connection is independent from optional delivery paths:
+
+| Integration | Role |
 | --- | --- |
-| General | Bridge sharing, shared source controls, permissions, media helper, and launch behavior |
-| Yohaku | First-party pairing, sanitized preview, and Live Desk controls |
-| Destinations | MixSpace, Slack, Discord, and optional Application Icon Hosting |
-| Privacy & Rules | Global privacy defaults and application-specific behavior |
-| Sync History | Local audit of sanitized delivery attempts |
-| Advanced | Reporting engine, mappings, storage, backup, updates, and diagnostics |
+| MixSpace | Compatibility HTTP Bridge for the legacy activity cloud function |
+| Slack | Sanitized profile-status delivery |
+| Discord | Local Rich Presence through the Discord client |
+| S3-compatible storage | Optional application-icon hosting; it is an asset service, not a Presence destination |
 
-The native menu bar menu is the primary operational interface. Settings is intended for configuration and audit rather than continuous activity browsing.
+Sync History stores a bounded local audit of sanitized Bridge delivery attempts and normalized results. It does not retain credentials, endpoints, authorization headers, raw provider responses, or raw capture payloads.
 
 ## Development
 
@@ -74,20 +115,28 @@ The native menu bar menu is the primary operational interface. Settings is inten
 bash scripts/setup_discord_sdk.sh
 
 xcodebuild \
-  -project ProcessReporter.xcodeproj \
-  -scheme ProcessReporter \
+  -project YohakuCompanion.xcodeproj \
+  -scheme YohakuCompanion \
   -configuration Debug \
+  -destination 'generic/platform=macOS' \
   CODE_SIGNING_ALLOWED=NO \
   SWIFT_STRICT_CONCURRENCY=complete \
   build
 ```
 
-The project, target, and scheme retain their internal `ProcessReporter` names during the staged migration. Debug uses the isolated `dev.innei.YohakuCompanion.debug` bundle and produces `YohakuCompanion_DEV.app`; Release uses `dev.innei.YohakuCompanion` and produces `YohakuCompanion.app`.
+The project, target, scheme, Swift module, and source directory all use `YohakuCompanion`. Debug and Release builds have separate bundle identities:
 
-See [ARCHITECTURE.md](ARCHITECTURE.md), [DEVELOPMENT.md](DEVELOPMENT.md), and [USER_GUIDE.md](USER_GUIDE.md) for additional detail.
+| Build | Bundle identifier | Product |
+| --- | --- | --- |
+| Debug | `dev.innei.YohakuCompanion.debug` | `YohakuCompanion_DEV.app` |
+| Release | `dev.innei.YohakuCompanion` | `YohakuCompanion.app` |
 
-## License
+Behavior-oriented protocol, pairing, consent, lifecycle, media-timing, and settings-transaction harnesses are documented in [DEVELOPMENT.md](DEVELOPMENT.md).
 
-2025 © Innei. Released under the [MIT License](LICENSE).
+## Further reading
 
-[Personal website](https://innei.in/) · GitHub [@Innei](https://github.com/innei/)
+- [User guide](USER_GUIDE.md)
+- [Architecture](ARCHITECTURE.md)
+- [Companion Protocol v2 API](API.md)
+- [Product specification](YOHAKU_COMPANION_PRODUCT_SPEC.md)
+- [Development and verification](DEVELOPMENT.md)

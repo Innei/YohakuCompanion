@@ -91,10 +91,10 @@ Run the repository's focused checks, at minimum:
 
 ```bash
 rtk proxy bash scripts/setup_discord_sdk.sh
-rtk proxy xcodebuild -project ProcessReporter.xcodeproj -scheme ProcessReporter -configuration Debug -destination 'generic/platform=macOS' build
-rtk proxy xcodebuild -project ProcessReporter.xcodeproj -scheme ProcessReporter -configuration Release -destination 'generic/platform=macOS' ARCHS=arm64 ONLY_ACTIVE_ARCH=NO build
+rtk proxy xcodebuild -project YohakuCompanion.xcodeproj -scheme YohakuCompanion -configuration Debug -destination 'generic/platform=macOS' build
+rtk proxy xcodebuild -project YohakuCompanion.xcodeproj -scheme YohakuCompanion -configuration Release -destination 'generic/platform=macOS' ARCHS=arm64 ONLY_ACTIVE_ARCH=NO build
 rtk git diff --check
-rtk proxy plutil -lint ProcessReporter/Info.plist ExportOptions.plist
+rtk proxy plutil -lint YohakuCompanion/Info.plist ExportOptions.plist
 ```
 
 Also run strict-concurrency and static-analysis checks when the release changes Swift runtime or data-flow code. The workflow runs `scripts/prepare_arm64_app.sh` after export because Sparkle's macOS binary framework contains multiple architecture slices even when the app target builds for arm64. Verify that Sparkle resolves to the reviewed version, every shipped executable and the Discord dylib are arm64-only after that preparation step, release notes are non-empty, and tag/project versions match.
@@ -104,7 +104,7 @@ Also run strict-concurrency and static-analysis checks when the release changes 
 Review the complete diff. Then create one release commit and annotated tag:
 
 ```bash
-rtk git add ProcessReporter.xcodeproj/project.pbxproj .github/release-notes/vX.Y.Z.md
+rtk git add YohakuCompanion.xcodeproj/project.pbxproj .github/release-notes/vX.Y.Z.md
 rtk git commit -m "release: vX.Y.Z"
 rtk git tag -a vX.Y.Z -m "Yohaku Companion vX.Y.Z"
 rtk git push --atomic origin main vX.Y.Z

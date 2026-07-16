@@ -115,14 +115,15 @@ private struct CompanionConnectionCaptureHarness {
         try await verifiesPairingTransportInstallsWithoutLeakingTheToken()
         try await verifiesPairingWithoutPresenceScopeIsRejected()
         try await verifiesPairingIsProtectedAndDefaultsToDisabled()
+        try await verifiesMissingCredentialCannotEnableLiveDesk()
         try await verifiesConcurrentDisableWinsOverCredentialResolution()
-        try verifiesApplicationPrivacyProducesAnApplicationOnlySnapshot()
+        try verifiesApplicationPrivacyPreservesExplicitAbsentMedia()
         try verifiesHiddenApplicationProducesAnExplicitIdleSnapshot()
         print("Companion connection and capture behavior passed")
     }
 
     private static func verifiesUnavailableProtectedStorageDoesNotConsumePairingCode() async throws {
-        let suiteName = "ProcessReporter.PairingPreflightHarness.\(UUID().uuidString)"
+        let suiteName = "YohakuCompanion.PairingPreflightHarness.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {
             throw HarnessFailure.assertion("could not create preflight defaults suite")
         }
@@ -191,7 +192,7 @@ private struct CompanionConnectionCaptureHarness {
         ]
 
         for (name, capabilitiesBody, expectedError) in scenarios {
-            let suiteName = "ProcessReporter.PairingCapabilitiesHarness.\(name).\(UUID().uuidString)"
+            let suiteName = "YohakuCompanion.PairingCapabilitiesHarness.\(name).\(UUID().uuidString)"
             let credentials = try RecordingCredentialPersistence(suiteName: suiteName)
             guard let defaults = UserDefaults(suiteName: suiteName) else {
                 throw HarnessFailure.assertion("could not create capabilities defaults suite")
@@ -237,7 +238,7 @@ private struct CompanionConnectionCaptureHarness {
     }
 
     private static func verifiesPairingErrorEnvelopeRetainsOnlyStableCode() async throws {
-        let suiteName = "ProcessReporter.PairingErrorHarness.\(UUID().uuidString)"
+        let suiteName = "YohakuCompanion.PairingErrorHarness.\(UUID().uuidString)"
         let untrustedMessage = "expired response must not become retained diagnostics"
         let response = """
         {
@@ -291,7 +292,7 @@ private struct CompanionConnectionCaptureHarness {
     }
 
     private static func verifiesPairingWithoutPresenceScopeIsRejected() async throws {
-        let suiteName = "ProcessReporter.PairingScopeHarness.\(UUID().uuidString)"
+        let suiteName = "YohakuCompanion.PairingScopeHarness.\(UUID().uuidString)"
         let response = """
         {
           "data": {
@@ -336,7 +337,7 @@ private struct CompanionConnectionCaptureHarness {
     }
 
     private static func verifiesPairingTransportInstallsWithoutLeakingTheToken() async throws {
-        let suiteName = "ProcessReporter.PairingHarness.\(UUID().uuidString)"
+        let suiteName = "YohakuCompanion.PairingHarness.\(UUID().uuidString)"
         let secret = "one-time-device-token"
         let response = """
         {
@@ -411,7 +412,7 @@ private struct CompanionConnectionCaptureHarness {
     }
 
     private static func verifiesConcurrentDisableWinsOverCredentialResolution() async throws {
-        let suiteName = "ProcessReporter.CompanionRaceHarness.\(UUID().uuidString)"
+        let suiteName = "YohakuCompanion.CompanionRaceHarness.\(UUID().uuidString)"
         guard let seedDefaults = UserDefaults(suiteName: suiteName) else {
             throw HarnessFailure.assertion("could not create race defaults suite")
         }
@@ -449,8 +450,55 @@ private struct CompanionConnectionCaptureHarness {
         seedDefaults.removePersistentDomain(forName: suiteName)
     }
 
+    private static func verifiesMissingCredentialCannotEnableLiveDesk() async throws {
+        let suiteName = "YohakuCompanion.MissingCredentialHarness.\(UUID().uuidString)"
+        guard let seedDefaults = UserDefaults(suiteName: suiteName) else {
+            throw HarnessFailure.assertion("could not create missing credential defaults suite")
+        }
+        seedDefaults.removePersistentDomain(forName: suiteName)
+
+        let metadata = try CompanionConnectionMetadata(
+            baseURL: URL(string: "https://example.com")!,
+            deviceID: deviceID,
+            pairingNextSequence: 10,
+            isLiveDeskEnabled: false
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        seedDefaults.set(
+            String(decoding: try encoder.encode(metadata), as: UTF8.self),
+            forKey: CompanionConnectionStore.metadataKey
+        )
+
+        let credentials = try RecordingCredentialPersistence(suiteName: suiteName)
+        guard let storeDefaults = UserDefaults(suiteName: suiteName) else {
+            throw HarnessFailure.assertion("could not open missing credential defaults suite")
+        }
+        let store = CompanionConnectionStore(
+            defaults: storeDefaults,
+            credentialPersistence: credentials
+        )
+
+        do {
+            _ = try await store.setLiveDeskEnabled(true)
+            throw HarnessFailure.assertion("Live Desk enabled without a device credential")
+        } catch CompanionConnectionStoreError.missingCredential {
+            // Expected: fail before consent metadata becomes enabled.
+        }
+
+        let retainedMetadata = try required(
+            try await store.loadMetadata(),
+            "missing credential check removed pairing metadata"
+        )
+        try expect(
+            !retainedMetadata.isLiveDeskEnabled,
+            "missing credential check persisted an enabled state"
+        )
+        seedDefaults.removePersistentDomain(forName: suiteName)
+    }
+
     private static func verifiesPairingIsProtectedAndDefaultsToDisabled() async throws {
-        let suiteName = "ProcessReporter.CompanionHarness.\(UUID().uuidString)"
+        let suiteName = "YohakuCompanion.CompanionHarness.\(UUID().uuidString)"
         guard let setupDefaults = UserDefaults(suiteName: suiteName) else {
             throw HarnessFailure.assertion("could not create isolated defaults suite")
         }
@@ -536,7 +584,7 @@ private struct CompanionConnectionCaptureHarness {
         inspectionDefaults.removePersistentDomain(forName: suiteName)
     }
 
-    private static func verifiesApplicationPrivacyProducesAnApplicationOnlySnapshot() throws {
+    private static func verifiesApplicationPrivacyPreservesExplicitAbsentMedia() throws {
         let application = try required(
             CompanionApplicationPresenceSanitizer.sanitize(
                 capturedDisplayName: "  Xcode  ",
@@ -565,7 +613,7 @@ private struct CompanionConnectionCaptureHarness {
         try expect(data["availability"] as? String == "active", "snapshot was not active")
         try expect(encodedApplication["displayName"] as? String == "Focus", "alias lost precedence")
         try expect(encodedApplication["window"] is NSNull, "hidden window title escaped privacy")
-        try expect(data["media"] is NSNull, "initial slice fabricated media context")
+        try expect(data["media"] is NSNull, "absent media was not encoded as null")
     }
 
     private static func verifiesHiddenApplicationProducesAnExplicitIdleSnapshot() throws {

@@ -12,7 +12,7 @@ Yohaku Companion is an independently installed macOS menu bar companion for Yoha
 
 ## Product Identity Boundary
 
-Yohaku Companion reuses internal Swift implementation identifiers, including the `ProcessReporter` Xcode project, target, scheme, source directory, protocol names, and legacy compatibility types. These are not the application identity.
+The Xcode project, target, scheme, module, and source directory use `YohakuCompanion`. Legacy protocol and compatibility type identifiers remain implementation details and are not the application identity.
 
 | Runtime boundary | Yohaku Companion identity |
 | --- | --- |
@@ -198,7 +198,7 @@ An ambiguous transport failure is retried once with the same encoded logical req
 
 `CompanionConnectionStore` persists only validated instance, device, sequence, and opt-in metadata in UserDefaults. The Device Token uses Yohaku Companion’s bundle-scoped `CredentialStore` transaction boundary, and pairing always commits `isLiveDeskEnabled = false`. It never queries the ProcessReporter credential namespace. `CompanionPairingClient` preflights both that protected authority and the server capability contract before consuming a one-time code, then passes the minted Token directly into the store; the token is not resolved again until explicit local opt-in is true.
 
-`CompanionLiveDeskCoordinator` is independent of `Reporter`: it negotiates capabilities before creating a writer, captures an application-only fresh snapshot after the privacy policy, coalesces activation and heartbeat requests, rate-limits against negotiated limits, rebuilds a fresh snapshot after network recovery, and clears best-effort on sleep, screen lock, and termination. `CompanionPresenceAuthorityRegistry` preserves one serialized writer and sequencer for the same paired server/device across lifecycle renegotiation; duplicate sleep/lock notifications are idempotent, and wake explicitly awaits the bounded cleanup task before restarting capability negotiation. Both the local opt-in and the server `liveDesk` capability default closed. Legacy MixSpace delivery therefore remains active without receiving or influencing Companion state.
+`CompanionLiveDeskCoordinator` is independent of `Reporter`: it negotiates capabilities before creating a writer, captures fresh application and media values after the privacy policy, coalesces activation, media-semantic, and heartbeat requests, rate-limits against negotiated limits, rebuilds a fresh snapshot after network recovery, and clears best-effort on sleep, screen lock, and termination. Media collection is installed only when both the local source and negotiated `mediaTimeline` capability are enabled. `MediaInfoManager` keeps the legacy Reporter callback and Companion's payload-free semantic observer as independent owners of one underlying provider session. `CompanionPresenceAuthorityRegistry` preserves one serialized writer and sequencer for the same paired server/device across lifecycle renegotiation; duplicate sleep/lock notifications are idempotent, and wake explicitly awaits the bounded cleanup task before restarting capability negotiation. Local opt-in and the server `liveDesk` capability remain fail-closed. Legacy MixSpace delivery therefore remains active without receiving or influencing Companion state.
 
 Schema or feature rejection is not treated as a generic transport degradation. `COMPANION_SCHEMA_UNSUPPORTED`, `COMPANION_FEATURE_UNAVAILABLE`, and an undecodable HTTP 426 terminate the current authority and heartbeat, then re-enter capability negotiation before any further mutation.
 
@@ -234,11 +234,11 @@ Diagnostics are deliberately sanitized. They include version, capability state, 
 The primary verification commands are:
 
 ```bash
-xcodebuild -project ProcessReporter.xcodeproj -scheme ProcessReporter \
+xcodebuild -project YohakuCompanion.xcodeproj -scheme YohakuCompanion \
   -configuration Debug -destination 'platform=macOS,arch=arm64' \
   CODE_SIGNING_ALLOWED=NO SWIFT_STRICT_CONCURRENCY=complete build
 
-xcodebuild -project ProcessReporter.xcodeproj -scheme ProcessReporter \
+xcodebuild -project YohakuCompanion.xcodeproj -scheme YohakuCompanion \
   -configuration Debug -destination 'platform=macOS,arch=arm64' \
   CODE_SIGNING_ALLOWED=NO SWIFT_STRICT_CONCURRENCY=complete analyze
 ```

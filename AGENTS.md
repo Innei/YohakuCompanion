@@ -3,7 +3,7 @@
 ## Product boundary
 
 - The public product name is **Yohaku Companion**.
-- `ProcessReporter` remains only as an internal Xcode project, target, scheme, source-directory, and compatibility identifier during the staged migration.
+- The Xcode project, target, scheme, module, and source directory use `YohakuCompanion`. Legacy `ProcessReporter` identifiers may remain only where changing them would alter a compatibility contract.
 - Release and Debug persistence must remain isolated under `dev.innei.YohakuCompanion` and `dev.innei.YohakuCompanion.debug`. Never read, copy, migrate, or delete the separately installed ProcessReporter application's data or credentials.
 - Pairing alone must not publish Presence. Live Desk requires a current sanitized preview and explicit user consent.
 - Live Desk uses Companion Protocol v2 directly against Yohaku Core. Do not restore the removed cloud-function transport.
@@ -15,8 +15,8 @@ On a clean checkout, run the checksum-pinned Discord SDK installer before Xcode 
 ```bash
 bash scripts/setup_discord_sdk.sh
 xcodebuild \
-  -project ProcessReporter.xcodeproj \
-  -scheme ProcessReporter \
+  -project YohakuCompanion.xcodeproj \
+  -scheme YohakuCompanion \
   -configuration Debug \
   CODE_SIGNING_ALLOWED=NO \
   SWIFT_STRICT_CONCURRENCY=complete \

@@ -14,7 +14,7 @@ Accessibility is optional at the product level and is required only for window-t
 
 ## Build
 
-The project, target, and scheme retain the internal `ProcessReporter` name during the staged migration. Debug builds use `dev.innei.YohakuCompanion.debug` and produce `YohakuCompanion_DEV.app`; Release builds use `dev.innei.YohakuCompanion` and produce `YohakuCompanion.app`. Credential storage derives its namespace from the active bundle identifier, so development builds cannot read or replace release credentials.
+The project, target, scheme, module, and source directory use `YohakuCompanion`. Debug builds use `dev.innei.YohakuCompanion.debug` and produce `YohakuCompanion_DEV.app`; Release builds use `dev.innei.YohakuCompanion` and produce `YohakuCompanion.app`. Credential storage derives its namespace from the active bundle identifier, so development builds cannot read or replace release credentials.
 
 On a clean checkout, install the pinned Discord Game SDK input first. The script verifies the downloaded archive against the repository-pinned SHA-256 before copying the arm64 headers and dylib into the ignored `Vendor/Discord` directory.
 
@@ -22,8 +22,8 @@ On a clean checkout, install the pinned Discord Game SDK input first. The script
 bash scripts/setup_discord_sdk.sh
 
 xcodebuild \
-  -project ProcessReporter.xcodeproj \
-  -scheme ProcessReporter \
+  -project YohakuCompanion.xcodeproj \
+  -scheme YohakuCompanion \
   -configuration Debug \
   -derivedDataPath /tmp/YohakuCompanion-derived \
   CODE_SIGNING_ALLOWED=NO \
@@ -35,8 +35,8 @@ Run static analysis separately:
 
 ```bash
 xcodebuild \
-  -project ProcessReporter.xcodeproj \
-  -scheme ProcessReporter \
+  -project YohakuCompanion.xcodeproj \
+  -scheme YohakuCompanion \
   -configuration Debug \
   -derivedDataPath /tmp/YohakuCompanion-analyze \
   CODE_SIGNING_ALLOWED=NO \
@@ -47,7 +47,7 @@ xcodebuild \
 ## Ownership boundaries
 
 ```text
-ProcessReporter/
+YohakuCompanion/
 ├── Companion/
 │   ├── Connection/            Non-secret metadata + protected Device Token adapter
 │   ├── Domain/                Sanitized first-party Presence values
@@ -110,47 +110,48 @@ The repository has no test target, so the pure Companion domain and transport bo
 
 ```bash
 xcrun swiftc -warnings-as-errors -strict-concurrency=complete \
-  ProcessReporter/Companion/Domain/SanitizedPresenceSnapshot.swift \
-  ProcessReporter/Companion/Domain/CompanionMediaSessionTracker.swift \
-  ProcessReporter/Companion/Protocol/CompanionProtocolV2.swift \
-  ProcessReporter/Companion/Protocol/CompanionCapabilityNegotiator.swift \
-  ProcessReporter/Companion/Protocol/CompanionPresenceDTOMapper.swift \
-  ProcessReporter/Companion/Transport/CompanionHTTPClient.swift \
-  ProcessReporter/Companion/Transport/YohakuPresenceClient.swift \
-  ProcessReporter/Companion/LiveDesk/CompanionPresenceAuthority.swift \
+  YohakuCompanion/Companion/Domain/SanitizedPresenceSnapshot.swift \
+  YohakuCompanion/Companion/Domain/CompanionMediaSessionTracker.swift \
+  YohakuCompanion/Presence/Capture/CompanionMediaPresenceSanitizer.swift \
+  YohakuCompanion/Companion/Protocol/CompanionProtocolV2.swift \
+  YohakuCompanion/Companion/Protocol/CompanionCapabilityNegotiator.swift \
+  YohakuCompanion/Companion/Protocol/CompanionPresenceDTOMapper.swift \
+  YohakuCompanion/Companion/Transport/CompanionHTTPClient.swift \
+  YohakuCompanion/Companion/Transport/YohakuPresenceClient.swift \
+  YohakuCompanion/Companion/LiveDesk/CompanionPresenceAuthority.swift \
   scripts/test_companion_protocol_v2.swift \
   -o /tmp/test_companion_protocol_v2
 
 /tmp/test_companion_protocol_v2
 ```
 
-The harness validates observable wire behavior: explicit nulls, Unicode normalization, millisecond conversion, position clamping, resource-host rejection, required nullable response keys, capability negotiation, response request-ID correlation, durable concurrent sequence allocation, Authorization-only credentials, the fixed Companion version header on clear and replace, exact-request retry after an ambiguous transport failure, a deliberately early wake remaining behind the bounded cleanup task, bounded clear returning before its deadline, and schema or feature rejection selecting capability refresh rather than a blind degraded heartbeat.
+The harness validates observable wire behavior: explicit nulls, Unicode normalization, media privacy and source-policy sanitization, paused playback semantics, millisecond conversion, position clamping, resource-host rejection, required nullable response keys, capability negotiation, response request-ID correlation, durable concurrent sequence allocation, Authorization-only credentials, the fixed Companion version header on clear and replace, exact-request retry after an ambiguous transport failure, a deliberately early wake remaining behind the bounded cleanup task, bounded clear returning before its deadline, and schema or feature rejection selecting capability refresh rather than a blind degraded heartbeat.
 
-The protected connection and application-only capture slice has a separate harness:
+The protected connection and explicit-null application capture boundary has a separate harness:
 
 ```bash
 xcrun swiftc -warnings-as-errors -strict-concurrency=complete \
-  ProcessReporter/Companion/Domain/SanitizedPresenceSnapshot.swift \
-  ProcessReporter/Companion/Protocol/CompanionProtocolV2.swift \
-  ProcessReporter/Companion/Protocol/CompanionCapabilityNegotiator.swift \
-  ProcessReporter/Companion/Protocol/CompanionPresenceDTOMapper.swift \
-  ProcessReporter/Companion/Transport/CompanionHTTPClient.swift \
-  ProcessReporter/Companion/Connection/CompanionConnectionStore.swift \
-  ProcessReporter/Companion/Connection/CompanionPairingClient.swift \
-  ProcessReporter/Presence/Capture/CompanionApplicationPresenceSanitizer.swift \
+  YohakuCompanion/Companion/Domain/SanitizedPresenceSnapshot.swift \
+  YohakuCompanion/Companion/Protocol/CompanionProtocolV2.swift \
+  YohakuCompanion/Companion/Protocol/CompanionCapabilityNegotiator.swift \
+  YohakuCompanion/Companion/Protocol/CompanionPresenceDTOMapper.swift \
+  YohakuCompanion/Companion/Transport/CompanionHTTPClient.swift \
+  YohakuCompanion/Companion/Connection/CompanionConnectionStore.swift \
+  YohakuCompanion/Companion/Connection/CompanionPairingClient.swift \
+  YohakuCompanion/Presence/Capture/CompanionApplicationPresenceSanitizer.swift \
   scripts/test_companion_connection_capture.swift \
   -o /tmp/test_companion_connection_capture
 
 /tmp/test_companion_connection_capture
 ```
 
-It verifies that protected storage and capabilities are checked before the one-time pairing code is consumed; feature-off, unsupported-schema, and outdated-client responses stop before claim with fixed local states; the code stays in the POST body; the global pairing error envelope retains only an allowlisted fixed code; the minted Token crosses directly into protected storage; pairing remains publicly disabled; disabled startup does not resolve the Device Token; a concurrent disable wins over an in-flight credential resolution; non-secret metadata contains no credential-shaped field or token value; explicit opt-in resolves the protected connection; removal clears both authorities; privacy-hidden applications become an idle snapshot; hidden window titles encode as `null`; and the first slice never fabricates media.
+It verifies that protected storage and capabilities are checked before the one-time pairing code is consumed; feature-off, unsupported-schema, and outdated-client responses stop before claim with fixed local states; the code stays in the POST body; the global pairing error envelope retains only an allowlisted fixed code; the minted Token crosses directly into protected storage; pairing remains publicly disabled; disabled startup does not resolve the Device Token; a concurrent disable wins over an in-flight credential resolution; non-secret metadata contains no credential-shaped field or token value; explicit opt-in resolves the protected connection; removal clears both authorities; privacy-hidden applications become an idle snapshot; hidden window titles encode as `null`; and an unavailable media source is encoded explicitly as `media: null`.
 
 The restartable coordinator lifecycle gate has a focused behavior harness:
 
 ```bash
 xcrun swiftc -warnings-as-errors -strict-concurrency=complete \
-  ProcessReporter/Companion/Application/CompanionCoordinatorLifecycle.swift \
+  YohakuCompanion/Companion/Application/CompanionCoordinatorLifecycle.swift \
   scripts/test_companion_coordinator_lifecycle.swift \
   -o /tmp/test_companion_coordinator_lifecycle
 
@@ -163,8 +164,8 @@ The Live Desk preview consent boundary has a standalone behavior harness:
 
 ```bash
 xcrun swiftc -warnings-as-errors -strict-concurrency=complete \
-  ProcessReporter/Companion/Domain/SanitizedPresenceSnapshot.swift \
-  ProcessReporter/Companion/Application/CompanionPreviewConsentGate.swift \
+  YohakuCompanion/Companion/Domain/SanitizedPresenceSnapshot.swift \
+  YohakuCompanion/Companion/Application/CompanionPreviewConsentGate.swift \
   scripts/test_companion_preview_consent_gate.swift \
   -o /tmp/test_companion_preview_consent_gate
 
@@ -177,9 +178,9 @@ Media timing has a separate provider-level behavior harness:
 
 ```bash
 xcrun swiftc -warnings-as-errors -strict-concurrency=complete \
-  ProcessReporter/Core/MediaInfoManager/MediaInfo.swift \
-  ProcessReporter/Core/MediaInfoManager/MediaInfoProvider.swift \
-  ProcessReporter/Core/MediaInfoManager/AdaptiveMediaInfoProvider.swift \
+  YohakuCompanion/Core/MediaInfoManager/MediaInfo.swift \
+  YohakuCompanion/Core/MediaInfoManager/MediaInfoProvider.swift \
+  YohakuCompanion/Core/MediaInfoManager/AdaptiveMediaInfoProvider.swift \
   scripts/test_media_timing_semantics.swift \
   -o /tmp/test_media_timing_semantics
 
@@ -196,7 +197,7 @@ The focused concurrency harness verifies serial admission, exclusive maintenance
 
 ```bash
 xcrun swiftc -warnings-as-errors -strict-concurrency=complete \
-  ProcessReporter/Core/Utilities/SettingsMutationCoordinator.swift \
+  YohakuCompanion/Core/Utilities/SettingsMutationCoordinator.swift \
   scripts/test_settings_mutation_coordinator.swift \
   -o /tmp/test_settings_mutation_coordinator
 
@@ -262,8 +263,8 @@ Never smoke-test migrations against the installed application’s bundle identif
 
 ```bash
 xcodebuild \
-  -project ProcessReporter.xcodeproj \
-  -scheme ProcessReporter \
+  -project YohakuCompanion.xcodeproj \
+  -scheme YohakuCompanion \
   -configuration Debug \
   -derivedDataPath /tmp/YohakuCompanion-isolated \
   PRODUCT_BUNDLE_IDENTIFIER=dev.example.YohakuCompanion.smoketest \
@@ -271,7 +272,7 @@ xcodebuild \
   build
 
 CFFIXED_USER_HOME=/tmp/yohaku-companion-smoketest-home \
-  /tmp/YohakuCompanion-isolated/Build/Products/Debug/YohakuCompanion_DEV.app/Contents/MacOS/YohakuCompanion_DEV
+  /tmp/YohakuCompanion-isolated/Build/Products/Debug/YohakuCompanion_DEV.app/Contents/MacOS/YohakuCompanion
 ```
 
 Use a new identifier for every migration fixture when `cfprefsd` caching could invalidate the result.

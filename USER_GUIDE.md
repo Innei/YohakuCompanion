@@ -1,8 +1,8 @@
 # Yohaku Companion User Guide
 
-Yohaku Companion is Yohaku’s native macOS companion. It publishes a privacy-sanitized snapshot of the foreground application to your Yohaku Live Desk after you pair this Mac, review the public preview, and explicitly enable sharing. It is not a productivity tracker and does not calculate work time, rankings, or focus scores.
+Yohaku Companion is Yohaku’s native macOS companion. It publishes a privacy-sanitized snapshot of the foreground application and eligible media playback to your Yohaku Live Desk after you pair this Mac, review the public preview, and explicitly enable sharing. It is not a productivity tracker and does not calculate work time, rankings, or focus scores.
 
-The current Live Desk client publishes application context only. Media collection remains available to local Presence and optional Bridges, but first-party Live Desk media publishing is enabled only when the client supports that capability.
+Media timeline delivery is capability-negotiated. When Core advertises `mediaTimeline`, Yohaku Companion publishes sanitized media identity and playback anchors; otherwise it continues with application Presence and explicitly sends `media: null`.
 
 ## Product Model
 
@@ -10,7 +10,7 @@ The current Live Desk client publishes application context only. Media collectio
 | --- | --- |
 | Yohaku Connection | A revocable device pairing between this Mac and one Yohaku server |
 | Live Desk | The latest sanitized, short-lived public projection; it is not an activity timeline |
-| Sanitized Preview | The exact application context eligible for first-party delivery after local privacy rules |
+| Sanitized Preview | The exact application and media context eligible for first-party delivery after local privacy rules |
 | Bridge | An optional Slack, Discord, or legacy MixSpace delivery path |
 | Sync Event | A bounded local audit record of one sanitized Bridge delivery |
 | Application Icon Hosting | Optional S3-compatible storage for public icon URLs used by supported Bridges |
@@ -92,7 +92,7 @@ Sources are independent:
 
 - **Applications** makes foreground application identity eligible for sanitization and delivery.
 - **Window Titles** allows Yohaku Companion to read the active title only while this switch is enabled. Accessibility permission and the privacy policy must also allow it. The switch is off by default on new installations.
-- **Media Playback** makes current title, artist, and media application available to supported local or Bridge paths.
+- **Media Playback** makes current title, artist, media application, and capability-negotiated playback timeline available to Live Desk and supported Bridges.
 
 General also reports Accessibility, media-provider, credential-storage, and Launch at Login state.
 
@@ -166,7 +166,7 @@ Confirm that the server advertises the Companion Live Desk capability, Yohaku Co
 
 ### Live Desk is not publishing
 
-Confirm that pairing completed, the sanitized preview was reviewed, Live Desk was explicitly enabled, at least one application field remains visible after privacy rules, and the server capability is still available. Pairing alone is intentionally insufficient.
+Confirm that pairing completed, the sanitized preview was reviewed, Live Desk was explicitly enabled, at least one application or media field remains visible after privacy rules, and the server capability is still available. Pairing alone is intentionally insufficient.
 
 ### Status says Waiting for Network
 

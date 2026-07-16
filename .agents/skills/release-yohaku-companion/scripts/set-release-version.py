@@ -30,7 +30,7 @@ def main() -> None:
 
     version = sys.argv[1]
     root = Path(__file__).resolve().parents[4]
-    project = root / "ProcessReporter.xcodeproj" / "project.pbxproj"
+    project = root / "YohakuCompanion.xcodeproj" / "project.pbxproj"
     if not project.is_file():
         fail(f"Xcode project not found at {project}")
 

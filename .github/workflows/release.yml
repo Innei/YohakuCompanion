@@ -84,10 +84,10 @@ jobs:
             exit 1
           fi
 
-          VERSION_COUNT="$(sed -nE 's/^[[:space:]]*MARKETING_VERSION = ([^;]+);/\1/p' ProcessReporter.xcodeproj/project.pbxproj | sort -u | wc -l | xargs)"
-          PROJECT_VERSION="$(sed -nE 's/^[[:space:]]*MARKETING_VERSION = ([^;]+);/\1/p' ProcessReporter.xcodeproj/project.pbxproj | sort -u | head -n 1)"
-          BUILD_COUNT="$(sed -nE 's/^[[:space:]]*CURRENT_PROJECT_VERSION = ([^;]+);/\1/p' ProcessReporter.xcodeproj/project.pbxproj | sort -u | wc -l | xargs)"
-          PROJECT_BUILD="$(sed -nE 's/^[[:space:]]*CURRENT_PROJECT_VERSION = ([^;]+);/\1/p' ProcessReporter.xcodeproj/project.pbxproj | sort -u | head -n 1)"
+          VERSION_COUNT="$(sed -nE 's/^[[:space:]]*MARKETING_VERSION = ([^;]+);/\1/p' YohakuCompanion.xcodeproj/project.pbxproj | sort -u | wc -l | xargs)"
+          PROJECT_VERSION="$(sed -nE 's/^[[:space:]]*MARKETING_VERSION = ([^;]+);/\1/p' YohakuCompanion.xcodeproj/project.pbxproj | sort -u | head -n 1)"
+          BUILD_COUNT="$(sed -nE 's/^[[:space:]]*CURRENT_PROJECT_VERSION = ([^;]+);/\1/p' YohakuCompanion.xcodeproj/project.pbxproj | sort -u | wc -l | xargs)"
+          PROJECT_BUILD="$(sed -nE 's/^[[:space:]]*CURRENT_PROJECT_VERSION = ([^;]+);/\1/p' YohakuCompanion.xcodeproj/project.pbxproj | sort -u | head -n 1)"
 
           if [[ "$VERSION_COUNT" != "1" || "$PROJECT_VERSION" != "$VERSION" ]]; then
             echo "Tag $TAG does not match the unique MARKETING_VERSION ($PROJECT_VERSION)." >&2
@@ -107,7 +107,7 @@ jobs:
               exit 1
             fi
 
-            PRIOR_BUILD="$(git show "$EXISTING_TAG:ProcessReporter.xcodeproj/project.pbxproj" 2>/dev/null | sed -nE 's/^[[:space:]]*CURRENT_PROJECT_VERSION = ([0-9]+);/\1/p' | sort -n | tail -n 1)"
+            PRIOR_BUILD="$(git show "$EXISTING_TAG:YohakuCompanion.xcodeproj/project.pbxproj" 2>/dev/null | sed -nE 's/^[[:space:]]*CURRENT_PROJECT_VERSION = ([0-9]+);/\1/p' | sort -n | tail -n 1)"
             if [[ "$PRIOR_BUILD" =~ ^[1-9][0-9]*$ ]] && (( PROJECT_BUILD <= PRIOR_BUILD )); then
               echo "Build $PROJECT_BUILD must exceed build $PRIOR_BUILD from $EXISTING_TAG." >&2
               exit 1
@@ -250,8 +250,8 @@ jobs:
 
           if [[ "$DISTRIBUTION_MODE" == "developer-id" ]]; then
             xcodebuild archive \
-              -project ProcessReporter.xcodeproj \
-              -scheme ProcessReporter \
+              -project YohakuCompanion.xcodeproj \
+              -scheme YohakuCompanion \
               -configuration Release \
               -destination 'generic/platform=macOS' \
               -archivePath "$ARCHIVE_PATH" \
@@ -272,8 +272,8 @@ jobs:
             # incompatible. Disable the hardened runtime only for this temporary
             # unsigned distribution mode; Developer ID builds retain it.
             xcodebuild archive \
-              -project ProcessReporter.xcodeproj \
-              -scheme ProcessReporter \
+              -project YohakuCompanion.xcodeproj \
+              -scheme YohakuCompanion \
               -configuration Release \
               -destination 'generic/platform=macOS' \
               -archivePath "$ARCHIVE_PATH" \

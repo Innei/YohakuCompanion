@@ -55,7 +55,7 @@
 - 不提供通用 S3 文件浏览器、对象管理器或图片托管后台。
 - 不提供云端账号体系、跨设备配置同步或远程控制。
 - 不把内部 Reporter Extension 机制直接暴露为面向用户的 Provider 概念。
-- 本阶段仅保留 `ProcessReporter` 工程、target、scheme 与源码目录等内部技术名称，不将产品改名与 Swift 语言版本升级绑定。
+- 工程、target、scheme、module 与源码目录统一使用 `YohakuCompanion`；仍不将产品改名与 Swift 语言版本升级绑定。
 
 ## 4. 领域术语
 
@@ -926,7 +926,7 @@ protocol PresenceDestination {
 ## 25. 建议代码组织
 
 ```text
-ProcessReporter/
+YohakuCompanion/
 ├── Presence/
 │   ├── Domain/
 │   ├── Capture/

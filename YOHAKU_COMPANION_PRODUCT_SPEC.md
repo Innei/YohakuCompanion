@@ -22,7 +22,7 @@
 5. 双向共同阅读所需的新 Session 领域与实时协议。
 6. 隐私、安全、离线、迁移、测试和验收要求。
 
-本规范是跨仓库实现的共同依据。Yohaku Companion 复用既有 Swift 代码并暂时保留 `ProcessReporter` target、module、scheme 和部分协议／兼容类型名称，但它是独立安装的新 App。正式 bundle identifier、Application Support 目录和 Keychain service 必须使用 Yohaku Companion 自己的命名空间，不读取、不复制且不隐式迁移 ProcessReporter 的数据或凭据。两个 App 可以同时安装；用户需要在 Yohaku Admin 中为 Yohaku Companion 重新配对。
+本规范是跨仓库实现的共同依据。Yohaku Companion 复用既有 Swift 代码，但工程、target、module、scheme 与源码目录统一使用 `YohakuCompanion`。正式 bundle identifier、Application Support 目录和 Keychain service 必须使用 Yohaku Companion 自己的命名空间，不读取、不复制且不隐式迁移 ProcessReporter 的数据或凭据。两个 App 可以同时安装；用户需要在 Yohaku Admin 中为 Yohaku Companion 重新配对。
 
 ### 1.1 与现有规范的关系
 
@@ -34,7 +34,7 @@
 | --- | --- |
 | 产品是通用个人 Presence 工具 | 产品是 Yohaku 生态的 macOS Companion |
 | MixSpace、Slack、Discord 均为同级 Destination | Yohaku 为一方核心连接；Slack、Discord 为可选 Bridges |
-| 本阶段不重命名 ProcessReporter | 独立发布 Yohaku Companion；仅保留必要的内部技术标识 |
+| 工程与产品命名 | 工程技术标识与产品身份统一为 Yohaku Companion；仅保留必要的兼容标识 |
 | Presence 是产品主体 | Presence 成为 Live Desk 的实时基础设施 |
 
 现有规范中的下列边界保持有效：
@@ -83,7 +83,7 @@ Yohaku Companion 是 Yohaku 的原生 macOS 伴生端。它把用户主动允许
 | 编号 | 决策 | 结论 |
 | --- | --- | --- |
 | D-01 | 产品名称 | 使用 `Yohaku Companion` |
-| D-02 | 应用身份 | 使用独立 bundle identifier、Application Support 与 Keychain 命名空间；仅暂时保留 `ProcessReporter` target／module／scheme 等内部标识 |
+| D-02 | 应用身份 | 使用 `YohakuCompanion` 工程、target、module、scheme 和源码目录，以及独立 bundle identifier、Application Support 与 Keychain 命名空间 |
 | D-03 | 一方连接 | Yohaku Connection 成为核心连接；旧 MixSpace endpoint／token 不等同于设备配对 |
 | D-04 | 第三方集成 | Slack、Discord 归类为 Bridges；不参与核心功能可用性判断 |
 | D-05 | Live Desk 存储 | 服务端只保存带 TTL 的最新投影，不保存 Presence 时间序列 |
@@ -152,7 +152,7 @@ Yohaku Companion 是 Yohaku 的原生 macOS 伴生端。它把用户主动允许
 
 | 术语 | 定义 |
 | --- | --- |
-| Companion | 独立安装的 Yohaku 原生 macOS 伴生端；内部暂时复用部分 `ProcessReporter` 工程标识 |
+| Companion | 独立安装的 Yohaku 原生 macOS 伴生端；工程技术标识统一为 `YohakuCompanion` |
 | Yohaku Connection | Companion 与一个 Yohaku／MixSpace 实例之间的一方安全连接 |
 | Raw Snapshot | 未经过隐私规则的本机采集结果，仅存在于内存 |
 | Sanitized Snapshot | 经过 Privacy Policy 处理、允许离开设备的状态 |
@@ -169,7 +169,7 @@ Yohaku Companion 是 Yohaku 的原生 macOS 伴生端。它把用户主动允许
 
 ### 7.1 Yohaku Companion macOS
 
-当前仓库由既有代码基础建立，因此下列实现类型和源码目录仍包含 `ProcessReporter` 技术名称；这些名称不代表产品身份或持久化命名空间。
+当前仓库由既有代码基础建立；工程、target、module、scheme 与源码目录已经统一为 `YohakuCompanion`。仅在明确的历史或兼容边界中允许保留旧标识，且旧标识不代表产品身份或持久化命名空间。
 
 在独立应用拆分开始时，复用的 macOS 代码基础已经具备：
 
@@ -190,23 +190,22 @@ Yohaku Companion 是 Yohaku 的原生 macOS 伴生端。它把用户主动允许
 - MixSpace 是通用 Endpoint／Token 配置，不是具备设备身份和 scope 的一方连接。
 - 没有 Moment outbox、Reading Session 或服务端下行订阅。
 
-当前 `1.7.3` 实现已交付独立应用身份、capability preflight、一次性代码配对、application-only Sanitized Preview、显式 Live Desk consent、pause／remove 与生命周期清除。媒体时间轴、Moment 与 Reading Session 仍按本文后续阶段交付；当前客户端通过 `media: null` 明确表示 first-party media 尚未启用。
+当前 `1.7.3` 实现已交付独立应用身份、capability preflight、一次性代码配对、包含 Application 与 Media 的 Sanitized Preview、显式 Live Desk consent、pause／remove 与生命周期清除。媒体时间轴按服务端 `mediaTimeline` capability 协商启用；当服务端不支持、媒体源关闭或当前无可发布媒体时，客户端通过 `media: null` 明确降级。Moment 与 Reading Session 仍按本文后续阶段交付。
 
 ### 7.2 Yohaku Web
 
 当前 Web 已经具备：
 
-- 通过 `/fn/ps/update` 取得桌面活动的旧路径。
-- 通过 `fn#ps-update` 和 `fn#media-update` 接收自定义实时事件。
-- `activityAtom` 中的 process 和 media 状态。
+- 通过 Companion Protocol v2 的公开 REST 端点取得初始 Live Desk state。
+- 通过 `companion.presence.changed` Gateway event 接收实时完整快照，并在 socket 重连后主动 REST resync。
+- 对 schema、nullable 字段、sequence、lease、server time 与媒体 timeline anchor 进行严格归一化和顺序归并。
+- 统一表达 loading、active、idle、expired 与 transport degraded，并在 lease 到期后清除陈旧投影。
+- 在顶部以 Live Desk paper slip 展示 Application 与 Media；hover popover 提供窗口标题、曲目信息、播放状态和可访问进度。
+- 旧 `/fn/ps/update`、`fn#ps-update` 与 `fn#media-update` 路径继续作为 legacy activity 独立存在，不参与 Companion state 合并。
 - 文章房间 Presence、阅读百分比和多人阅读轨道。
-- Socket.IO Web Worker、断线重连和初始 REST Presence 查询。
 
 当前缺口：
 
-- 媒体类型没有 `position`、`sampledAt`、`state` 或 `rate`。
-- 活动查询主要依赖五分钟轮询和自定义 Function 事件，没有强类型一方契约。
-- Live Desk 尚无统一的加载、活跃、暂停、过期和离线状态。
 - 没有 Moment 创建／展示模型。
 - 网页 Presence 只能表达当前房间中的网页会话，不能表达明确的共读 Session。
 
@@ -214,18 +213,17 @@ Yohaku Companion 是 Yohaku 的原生 macOS 伴生端。它把用户主动允许
 
 当前服务端已经具备：
 
-- `ActivityPresence`：`identity`、`roomName`、`position`、`sid`、时间字段和可选读者身份。
-- `/activity/presence/update` 和 `/activity/presence`。
-- 基于当前 WebSocket socket metadata 的 Presence 存储与广播。
-- Yohaku 内容房间、读者身份和实时 Gateway。
+- 独立 Companion Device、一次性 Pairing Code、scope、可撤销 Device Token 与受保护的设备凭据边界。
+- Protocol v2 capability、minimum client version、payload limit、rate limit、lease、sequence、clear reason 与 request correlation。
+- 原子 Live Desk Application／Media snapshot、短期 lease 存储、公开 REST 投影和 `companion.presence.changed` Gateway event。
+- Admin 中的配对码生成、设备状态与撤销入口。
+- `@mx-space/api-client` 5.5.0 的 Companion 类型、DTO 与控制器。
+- 既有网页 `ActivityPresence`、内容房间、读者身份和实时 Gateway。
 
 当前缺口：
 
-- Presence 更新必须关联一个现存网页 socket `sid`，原生设备不能成为独立参与者。
-- 没有 Device Token、Companion scope、Live Desk lease 或 sequence 语义。
 - 没有持久 Moment 领域。
 - 没有 Reading Session、角色、显式加入、跟随关系或稳定内容 Cursor。
-- `@mx-space/api-client` 没有 Companion、Moment、Reading Session 类型和控制器。
 
 ### 7.4 旧 Function payload
 
@@ -290,7 +288,7 @@ flowchart LR
 
 | 仓库／包 | 责任 |
 | --- | --- |
-| YohakuCompanion（内部 target／module 暂名 `ProcessReporter`） | 本机采集、隐私清洗、时间轴采样、配对、Moment outbox、菜单栏与 Settings |
+| YohakuCompanion | 本机采集、隐私清洗、时间轴采样、配对、Moment outbox、菜单栏与 Settings |
 | mx-core `apps/core` | Device Auth、Live Desk Projection、Moment、Reading Session、广播与 TTL |
 | mx-core `packages/api-client` | 四端共享的请求、响应和事件类型 |
 | Yohaku `apps/web` | Live Desk UI、媒体进度推演、Moment 展示、共同阅读参与体验 |
@@ -1434,7 +1432,7 @@ Release 2 不持久保存 Session Cursor 历史。结束后的 Session 状态最
 ### 17.1 目标模块边界
 
 ```text
-ProcessReporter/
+YohakuCompanion/
 ├── Companion/
 │   ├── Connection/
 │   ├── LiveDesk/
@@ -1673,7 +1671,7 @@ Core、Yohaku 和后续管理端必须消费这些共享类型；不得复制 JS
 | Application Support | 以当前 Yohaku Companion bundle identifier 建立目录 | 不读取、不复制旧目录 |
 | Keychain／保护凭据 | service 名称由当前 bundle identifier 派生 | 不查询或迁移 ProcessReporter credential service |
 | Yohaku Device | 首次运行通过一次性配对码创建新设备 | 不复用旧 token，必须重新配对 |
-| 工程内部名称 | target、module、scheme 和兼容类型可暂时保留 `ProcessReporter` | 仅属技术实现，不得出现在产品文案中 |
+| 工程内部名称 | project、target、module、scheme 与源码目录统一使用 `YohakuCompanion` | 旧标识仅允许出现在明确的历史或兼容边界中 |
 | App 版本 | 保持 `1.7.3` | 满足 Core 的 `minimumClientVersion`，不因换产品身份重置版本 |
 
 ### 24.2 安装与数据约束
@@ -1919,7 +1917,7 @@ flowchart LR
 
 | 问题 | 结论 |
 | --- | --- |
-| ProcessReporter 是否继续作为面向用户的产品名 | 否；仅暂时保留为工程内部名称 |
+| ProcessReporter 是否继续作为面向用户或工程内部名称 | 否；仅在明确的历史或兼容边界中保留 |
 | 是否把 Yohaku 当作普通 Destination | 否；它是一方核心连接 |
 | 是否删除 Slack／Discord | 否；保留为 Bridges |
 | 是否每秒上报音乐进度 | 否；使用时间轴锚点和本地推演 |
@@ -1941,13 +1939,13 @@ flowchart LR
 
 | 领域 | 当前文件 |
 | --- | --- |
-| macOS 媒体模型 | `ProcessReporter/Core/MediaInfoManager/MediaInfo.swift` |
-| macOS 媒体采样与去重 | `ProcessReporter/Core/MediaInfoManager/MediaInfoProvider.swift`、`MediaInfoManager.swift` |
-| macOS JXA MediaRemote | `ProcessReporter/Core/MediaInfoManager/JXAMediaInfoProvider.swift` |
-| macOS 投递准备 | `ProcessReporter/Core/Reporter/Reporter.swift` |
-| 当前 MixSpace payload | `ProcessReporter/Core/Reporter/Reporter+MixSpace.swift` |
+| macOS 媒体模型 | `YohakuCompanion/Core/MediaInfoManager/MediaInfo.swift` |
+| macOS 媒体采样与去重 | `YohakuCompanion/Core/MediaInfoManager/MediaInfoProvider.swift`、`MediaInfoManager.swift` |
+| macOS JXA MediaRemote | `YohakuCompanion/Core/MediaInfoManager/JXAMediaInfoProvider.swift` |
+| macOS 投递准备 | `YohakuCompanion/Core/Reporter/Reporter.swift` |
+| 当前 MixSpace payload | `YohakuCompanion/Core/Reporter/Reporter+MixSpace.swift` |
 | 旧 Function payload／cache／broadcast | 已从新仓库移除；仅保留于 ProcessReporter 历史中作为 Legacy Adapter 参考 |
-| macOS 隐私规则 | `ProcessReporter/Presence/Policy/PresencePrivacyPolicy.swift` |
+| macOS 隐私规则 | `YohakuCompanion/Presence/Policy/PresencePrivacyPolicy.swift` |
 | Yohaku 活动状态 | `../Yohaku/apps/web/src/atoms/activity.ts` |
 | Yohaku 当前活动 UI | `../Yohaku/apps/web/src/components/layout/header/internal/Activity.tsx` |
 | Yohaku 旧实时事件 | `../Yohaku/apps/web/src/socket/handlers/activity.ts` |

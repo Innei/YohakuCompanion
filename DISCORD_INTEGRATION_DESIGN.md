@@ -1,6 +1,6 @@
 # Discord Rich Presence Integration Design (Official SDK)
 
-> Status: legacy implementation reference. The current product identity and user-facing copy are defined by `YOHAKU_COMPANION_PRODUCT_SPEC.md` and use **Yohaku Companion**. `ProcessReporter/` source paths remain valid internal project paths. Legacy examples below may still show the former Discord asset key; current runtime defaults the branding key to empty and publishes no small image until a Developer Portal asset is configured explicitly.
+> Status: legacy implementation reference. The current product identity and user-facing copy are defined by `YOHAKU_COMPANION_PRODUCT_SPEC.md` and use **Yohaku Companion**. Source paths below use the current `YohakuCompanion/` directory. Legacy examples may still show the former Discord asset key; current runtime defaults the branding key to empty and publishes no small image until a Developer Portal asset is configured explicitly.
 
 ## Overview
 
@@ -25,7 +25,7 @@ Based on the analysis of existing integrations (MixSpace, S3, Slack), all integr
 ### Key Components Structure
 
 ```
-ProcessReporter/Core/Reporter/
+YohakuCompanion/Core/Reporter/
 ├── Reporter.swift                    # Central reporting engine
 ├── Reporter+Types.swift              # ReporterExtension protocol
 ├── Reporter+MixSpace.swift           # MixSpace integration
@@ -164,12 +164,12 @@ private func sendDiscordRichPresence(data: ReportModel) async -> Result<Void, Re
         }
     }
 
-    // Always add ProcessReporter branding as small image
+    // Always add Yohaku Companion branding as small image
     if presence.assets == nil {
         presence.assets = RichPresence.Assets()
     }
-    presence.assets?.smallImage = config.brandSmallImageKey.isEmpty ? "processreporter" : config.brandSmallImageKey
-    presence.assets?.smallText = "ProcessReporter"
+    presence.assets?.smallImage = config.brandSmallImageKey.isEmpty ? "yohaku-companion" : config.brandSmallImageKey
+    presence.assets?.smallText = "Yohaku Companion"
 
     // Large image already handled above when building process/media presence
 
@@ -353,7 +353,7 @@ struct DiscordActivity {
     var endTimestamp: Int64?       // End time for countdown display
     var largeImageKey: String?     // Pre-uploaded asset key in Discord app
     var largeImageText: String?    // Hover text for large image
-    var smallImageKey: String?     // ProcessReporter branding asset key
+    var smallImageKey: String?     // Yohaku Companion branding asset key
     var smallImageText: String?    // Hover text for small image
 
     func toDictionary() -> [String: Any] {
@@ -393,7 +393,7 @@ extension PreferencesDataModel {
         // Image Configuration (asset keys only)
         var customLargeImageKey: String = ""  // Pre-uploaded asset key in Discord Dev Portal
         var customLargeImageText: String = ""
-        var brandSmallImageKey: String = "processreporter"  // ProcessReporter branding (small image asset key)
+        var brandSmallImageKey: String = "yohaku-companion"  // Yohaku Companion branding (small image asset key)
 
         // Future enhancements
         var enableButtons: Bool = false
@@ -421,8 +421,8 @@ RichPresence.timestamps.start = current_time (for "elapsed time")
 // Large image: use configured asset key if set
 RichPresence.assets.largeImage = customLargeImageKey
 RichPresence.assets.largeText = ReportModel.processName
-RichPresence.assets.smallImage = ProcessReporter_brand_icon_asset_key
-RichPresence.assets.smallText = "ProcessReporter"
+RichPresence.assets.smallImage = Yohaku_Companion_brand_icon_asset_key
+RichPresence.assets.smallText = "Yohaku Companion"
 ```
 
 #### Media State Mapping
@@ -435,8 +435,8 @@ RichPresence.timestamps.end = current_time + (duration - elapsed_time)
 // Large image: use configured asset key if set
 RichPresence.assets.largeImage = customLargeImageKey
 RichPresence.assets.largeText = ReportModel.mediaProcessName
-RichPresence.assets.smallImage = configured_small_icon_asset_key or ProcessReporter_logo
-RichPresence.assets.smallText = "ProcessReporter"
+RichPresence.assets.smallImage = configured_small_icon_asset_key or Yohaku_Companion_logo
+RichPresence.assets.smallText = "Yohaku Companion"
 ```
 
 ## Preferences UI Specification
@@ -523,7 +523,7 @@ class PreferencesIntegrationDiscordView: IntegrationView {
    - ✅ Custom large image key (覆盖 S3 图标，来自 Discord Developer Portal 资源)
    - ✅ Large image hover text
    - ✅ Show timestamps toggle
-   - ✅ ProcessReporter branding as small icon (自动添加品牌标识)
+   - ✅ Yohaku Companion branding as small icon (自动添加品牌标识)
    - ❌ 移除手动小图标配置 (自动使用品牌标识)
    - ❌ 移除按钮配置 (第一版不实现)
 
@@ -556,7 +556,7 @@ class PreferencesIntegrationDiscordView: IntegrationView {
 
 ### Discord Rich Presence Image Requirements
 - **Large Image**: Pre-uploaded Asset Key (configurable). If not configured, omit or use a default branding asset.
-- **Small Image**: Fixed ProcessReporter branding asset key (configurable).
+- **Small Image**: Fixed Yohaku Companion branding asset key (configurable).
 - **Image Formats**: Assets are managed by Discord and referenced by key; external URLs are not supported by the official SDK.
 
 ### Dependencies
@@ -666,7 +666,7 @@ Add Discord status to status item menu following existing pattern in `StatusItem
 1. Download Discord Game SDK from: `https://dl-game-sdk.discordapp.net/latest/discord_game_sdk.zip`
 2. Add SDK files to Xcode project:
    ```
-   ProcessReporter/Frameworks/DiscordSDK/
+   YohakuCompanion/Frameworks/DiscordSDK/
    ├── discord.h                    # C++ header
    └── discord_game_sdk.dylib       # macOS arm64 library
    ```
@@ -715,18 +715,18 @@ Add Discord status to status item menu following existing pattern in `StatusItem
 ### Implementation Files (Official SDK)
 
 ```
-ProcessReporter/Frameworks/DiscordSDK/
+YohakuCompanion/Frameworks/DiscordSDK/
 ├── discord.h                           # Discord Game SDK C++ header
 └── discord_game_sdk.dylib              # macOS arm64 library
 
-ProcessReporter/Core/Discord/
+YohakuCompanion/Core/Discord/
 ├── DiscordSDKBridge.h                  # Objective-C header
 └── DiscordSDKBridge.mm                 # Objective-C++ implementation
 
-ProcessReporter/Core/Reporter/
+YohakuCompanion/Core/Reporter/
 └── Reporter+Discord.swift              # Discord integration extension
 
-ProcessReporter/Preferences/
+YohakuCompanion/Preferences/
 ├── DataModels/
 │   └── PreferencesDataModel+Discord.swift   # Discord preferences model
 └── Views/
@@ -737,12 +737,12 @@ ProcessReporter/Preferences/
 - ✅ **Official Discord Game SDK** (C++ library with official support)
 - ✅ Apple Silicon arm64 support with Intel slices excluded
 - ✅ Objective-C++/Swift bridge (mature, stable interop)
-- ✅ Existing ProcessReporter frameworks (RxSwift, SnapKit for UI)
+- ✅ Existing Yohaku Companion frameworks (RxSwift, SnapKit for UI)
 - ✅ macOS 15.0+ on Apple Silicon
-- ✅ Swift 5.0+ (already supported by ProcessReporter)
+- ✅ Swift 5.0+ (already supported by Yohaku Companion)
 - ✅ Direct S3 icon integration via existing `DataStore.shared.iconURL()` API
 - ✅ Full Discord Rich Presence feature support (including buttons)
 - ✅ Robust error handling and edge case management by official SDK
 - ✅ Future compatibility with Discord updates
 
-This design provides a comprehensive foundation for implementing Discord Rich Presence integration while maintaining consistency with the existing ProcessReporter architecture and user experience patterns.
+This design provides a comprehensive foundation for implementing Discord Rich Presence integration while maintaining consistency with the existing Yohaku Companion architecture and user experience patterns.

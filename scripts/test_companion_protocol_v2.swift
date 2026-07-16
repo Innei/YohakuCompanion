@@ -30,6 +30,7 @@ private struct CompanionProtocolV2Harness {
         try verifiesResponseSchemaAndOrderingValuesAreValidated()
         try verifiesWireDatesRequireCanonicalMilliseconds()
         try verifiesCapabilitiesFailClosedAndRespectMinimumVersion()
+        try verifiesMediaSanitizationBehavior()
         try await verifiesMediaSessionIdentityContinuity()
         try await verifiesSequenceReservationsAreDurableAndUnique()
         try await verifiesMismatchedResponseRequestIDIsRejected()
@@ -395,6 +396,7 @@ private struct CompanionProtocolV2Harness {
         try expect(reconciledPersisted == 52, "reconciled sequence was not persisted")
     }
 
+    @MainActor
     private static func verifiesMediaSessionIdentityContinuity() async throws {
         let tracker = CompanionMediaSessionTracker()
         let identity = CompanionMediaSemanticIdentity(
@@ -405,8 +407,8 @@ private struct CompanionProtocolV2Harness {
             playerDisplayName: "Music",
             durationSeconds: 203
         )
-        let first = await tracker.sessionID(for: identity)
-        let afterSeekOrPause = await tracker.sessionID(for: identity)
+        let first = tracker.sessionID(for: identity)
+        let afterSeekOrPause = tracker.sessionID(for: identity)
         try expect(first == afterSeekOrPause, "seek or pause would rotate the media session ID")
 
         let changedTrack = CompanionMediaSemanticIdentity(
@@ -417,12 +419,96 @@ private struct CompanionProtocolV2Harness {
             playerDisplayName: "Music",
             durationSeconds: 203
         )
-        let second = await tracker.sessionID(for: changedTrack)
+        let second = tracker.sessionID(for: changedTrack)
         try expect(first != second, "changed media identity reused the previous session ID")
 
-        await tracker.reset()
-        let afterDiscontinuity = await tracker.sessionID(for: changedTrack)
+        tracker.reset()
+        let afterDiscontinuity = tracker.sessionID(for: changedTrack)
         try expect(second != afterDiscontinuity, "provider discontinuity did not rotate session ID")
+    }
+
+    private static func verifiesMediaSanitizationBehavior() throws {
+        let sessionID = try required(
+            UUID(uuidString: "98A80CCB-1B86-4D21-A1AB-91D53D287A41"),
+            "media fixture UUID was invalid"
+        )
+        let sampledAt = Date(timeIntervalSince1970: 1_721_131_200)
+
+        let hidden = try CompanionMediaPresenceSanitizer.sanitize(
+            sessionID: sessionID,
+            kind: .music,
+            capturedTitle: "Track",
+            capturedArtist: "Artist",
+            capturedAlbum: nil,
+            playerDisplayName: "Player",
+            durationSeconds: 180,
+            positionSeconds: 30,
+            sampledAt: sampledAt,
+            isPlaying: true,
+            sharesMedia: false,
+            requiresArtist: false
+        )
+        try expect(hidden == nil, "privacy-hidden media survived sanitization")
+
+        let missingArtist = try CompanionMediaPresenceSanitizer.sanitize(
+            sessionID: sessionID,
+            kind: .unknown,
+            capturedTitle: "Track",
+            capturedArtist: "   ",
+            capturedAlbum: nil,
+            playerDisplayName: nil,
+            durationSeconds: nil,
+            positionSeconds: nil,
+            sampledAt: sampledAt,
+            isPlaying: true,
+            sharesMedia: true,
+            requiresArtist: true
+        )
+        try expect(missingArtist == nil, "blank artist bypassed the source policy")
+
+        let paused = try required(
+            try CompanionMediaPresenceSanitizer.sanitize(
+                sessionID: sessionID,
+                kind: .music,
+                capturedTitle: "  Track  ",
+                capturedArtist: nil,
+                capturedAlbum: "  Album  ",
+                playerDisplayName: "  Player  ",
+                durationSeconds: 180,
+                positionSeconds: 220,
+                sampledAt: sampledAt,
+                isPlaying: false,
+                sharesMedia: true,
+                requiresArtist: false
+            ),
+            "title-only paused media was removed"
+        )
+        try expect(paused.title == "Track", "media title was not normalized")
+        try expect(paused.album == "Album", "media album was not normalized")
+        try expect(paused.playerDisplayName == "Player", "player name was not normalized")
+        try expect(paused.playback.state == .paused, "paused media became playing")
+        try expect(paused.playback.rate == 0, "paused media retained a playback rate")
+        try expect(paused.playback.positionSeconds == 180, "position was not clamped to duration")
+
+        let zero = try required(
+            try CompanionMediaPresenceSanitizer.sanitize(
+                sessionID: sessionID,
+                kind: .unknown,
+                capturedTitle: "Track",
+                capturedArtist: nil,
+                capturedAlbum: nil,
+                playerDisplayName: nil,
+                durationSeconds: 0,
+                positionSeconds: 0,
+                sampledAt: sampledAt,
+                isPlaying: true,
+                sharesMedia: true,
+                requiresArtist: false
+            ),
+            "real zero timing was removed"
+        )
+        try expect(zero.playback.durationSeconds == 0, "zero duration became unavailable")
+        try expect(zero.playback.positionSeconds == 0, "zero position became unavailable")
     }
 
     private static func verifiesAmbiguousTransportRetryReusesExactRequest() async throws {
@@ -838,6 +924,11 @@ private struct CompanionProtocolV2Harness {
 
     private static func expect(_ condition: @autoclosure () -> Bool, _ message: String) throws {
         guard condition() else { throw HarnessFailure.assertion(message) }
+    }
+
+    private static func required<T>(_ value: T?, _ message: String) throws -> T {
+        guard let value else { throw HarnessFailure.assertion(message) }
+        return value
     }
 }
 

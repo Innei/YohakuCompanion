@@ -34,20 +34,32 @@ private func snapshot(
     )
 }
 
-private func media(title: String) throws -> SanitizedMediaPresence {
+private func media(
+    title: String,
+    sessionID: UUID = UUID(uuidString: "8A79DECF-4495-4C65-97CA-E6E7E625DF01")!,
+    kind: CompanionMediaKind = .music,
+    artist: String? = "Artist",
+    album: String? = nil,
+    playerDisplayName: String? = "Player",
+    state: CompanionMediaPlaybackState = .playing,
+    durationSeconds: Double? = 180,
+    positionSeconds: Double? = 30,
+    sampledAt: Date = Date(timeIntervalSince1970: 20),
+    rate: Double = 1
+) throws -> SanitizedMediaPresence {
     try SanitizedMediaPresence(
-        sessionID: UUID(uuidString: "8A79DECF-4495-4C65-97CA-E6E7E625DF01")!,
-        kind: .music,
+        sessionID: sessionID,
+        kind: kind,
         title: title,
-        artist: "Artist",
-        album: nil,
-        playerDisplayName: "Player",
+        artist: artist,
+        album: album,
+        playerDisplayName: playerDisplayName,
         playback: SanitizedMediaPlayback(
-            state: .playing,
-            durationSeconds: 180,
-            positionSeconds: 30,
-            sampledAt: Date(timeIntervalSince1970: 20),
-            rate: 1
+            state: state,
+            durationSeconds: durationSeconds,
+            positionSeconds: positionSeconds,
+            sampledAt: sampledAt,
+            rate: rate
         )
     )
 }
@@ -92,17 +104,70 @@ private enum CompanionPreviewConsentGateHarness {
             media: media(title: "First Track")
         )
         let firstMediaPreview = mediaGate.recordPreview(firstMediaSnapshot)
-        let changedMediaSnapshot = try snapshot(
+        let changedSessionSnapshot = try snapshot(
             applicationName: nil,
-            media: media(title: "Second Track")
+            media: media(
+                title: "First Track",
+                sessionID: UUID(uuidString: "D8854BED-BE90-4D79-A81E-62A79AF68C19")!
+            )
         )
         try expect(
-            !mediaGate.validates(
+            mediaGate.validates(
                 firstMediaPreview,
-                currentSnapshot: changedMediaSnapshot
+                currentSnapshot: changedSessionSnapshot
             ),
-            "changed sanitized media content remained confirmable"
+            "a continuity-only media session ID change invalidated consent"
         )
+
+        let advancedPlaybackSnapshot = try snapshot(
+            applicationName: nil,
+            media: media(
+                title: "First Track",
+                positionSeconds: 46,
+                sampledAt: Date(timeIntervalSince1970: 36)
+            ),
+            observedAt: Date(timeIntervalSince1970: 37)
+        )
+        try expect(
+            mediaGate.validates(
+                firstMediaPreview,
+                currentSnapshot: advancedPlaybackSnapshot
+            ),
+            "natural media position and sampling-time changes invalidated consent"
+        )
+
+        let semanticChanges: [(name: String, media: SanitizedMediaPresence)] = [
+            ("title", try media(title: "Second Track")),
+            ("artist", try media(title: "First Track", artist: "Second Artist")),
+            ("album", try media(title: "First Track", album: "Album")),
+            (
+                "player",
+                try media(title: "First Track", playerDisplayName: "Second Player")
+            ),
+            ("kind", try media(title: "First Track", kind: .podcast)),
+            (
+                "playback state",
+                try media(title: "First Track", state: .paused, rate: 0)
+            ),
+            (
+                "duration",
+                try media(title: "First Track", durationSeconds: 181)
+            ),
+            ("playback rate", try media(title: "First Track", rate: 1.25)),
+        ]
+        for change in semanticChanges {
+            let changedMediaSnapshot = try snapshot(
+                applicationName: nil,
+                media: change.media
+            )
+            try expect(
+                !mediaGate.validates(
+                    firstMediaPreview,
+                    currentSnapshot: changedMediaSnapshot
+                ),
+                "changed media \(change.name) remained confirmable"
+            )
+        }
 
         gate.policyDidChange()
         try expect(!gate.isPreviewCurrent, "a policy change retained stale consent")
