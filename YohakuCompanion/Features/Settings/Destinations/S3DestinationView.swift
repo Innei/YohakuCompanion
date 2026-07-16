@@ -149,7 +149,9 @@ struct S3DestinationView: View {
                 .padding(.horizontal, 18)
                 .padding(.vertical, 12)
                 Divider()
-                CachedIconsViewControllerRepresentable()
+                CachedIconsViewControllerRepresentable {
+                    showingCachedIcons = false
+                }
             }
             .frame(width: 900, height: 520)
         }
@@ -201,12 +203,18 @@ struct S3DestinationView: View {
 }
 
 private struct CachedIconsViewControllerRepresentable: NSViewControllerRepresentable {
+    let onClose: () -> Void
+
     func makeNSViewController(context: Context) -> PreferencesS3IconsViewController {
-        PreferencesS3IconsViewController()
+        let viewController = PreferencesS3IconsViewController()
+        viewController.onClose = onClose
+        return viewController
     }
 
     func updateNSViewController(
         _ nsViewController: PreferencesS3IconsViewController,
         context: Context
-    ) {}
+    ) {
+        nsViewController.onClose = onClose
+    }
 }

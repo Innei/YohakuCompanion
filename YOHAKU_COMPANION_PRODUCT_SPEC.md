@@ -1113,7 +1113,7 @@ interface CompanionCapabilities {
 
 - Companion 在配对前和服务端返回 `COMPANION_SCHEMA_UNSUPPORTED` 后刷新 capabilities。
 - 低于最低安全版本的客户端停止发送，并提供升级入口；服务端同时拒绝缺少、格式非法或低于最低版本的 `X-Yohaku-Companion-Version`，返回 `426 COMPANION_SCHEMA_UNSUPPORTED`。
-- `features.liveDesk` 是服务端硬门而非提示。默认关闭；关闭时 Presence mutation 与 public read 在进入 Redis 前返回 `503 COMPANION_FEATURE_UNAVAILABLE`，不得写入、广播或暴露已有 Projection。只有部署显式设置 `COMPANION_LIVE_DESK_ENABLED=true` 并重启后，capabilities 与端点才同时开放。
+- 支持 Companion Protocol v2 的 Core 必须始终返回 `features.liveDesk: true`，Presence mutation 与 public read 随服务启动直接可用，不设置独立环境变量或运行时硬门。配对凭证、客户端 Sanitized Preview 与显式 Live Desk consent 才是写入和公开状态的授权边界；`features.liveDesk` 继续保留用于协议兼容与旧服务端识别。
 - Presence 收到 `429` 时只保留最新 Snapshot，不排队重放中间状态。
 - Reading Cursor 收到 `429` 时合并为最新 Cursor，不重放滚动轨迹。
 - 服务端必须在持久化／广播前重新执行长度、类型、URL scheme、finite number 和授权校验。
@@ -1630,7 +1630,7 @@ Core、Yohaku 和后续管理端必须消费这些共享类型；不得复制 JS
 | `COMPANION_DEVICE_REVOKED` | 设备已被撤销 |
 | `COMPANION_SCOPE_DENIED` | Token scope 不足 |
 | `COMPANION_SCHEMA_UNSUPPORTED` | 客户端 schema 或版本不受支持 |
-| `COMPANION_FEATURE_UNAVAILABLE` | 服务端尚未启用对应 Companion 功能 |
+| `COMPANION_FEATURE_UNAVAILABLE` | 可选 Companion 功能不可用；保留用于旧服务端兼容，当前 Live Desk 不返回此错误 |
 | `COMPANION_SEQUENCE_STALE` | Presence sequence 过期 |
 | `COMPANION_SEQUENCE_CONFLICT` | 相同 sequence 对应了不同请求或 canonical payload |
 | `COMPANION_PAYLOAD_INVALID` | 契约校验失败 |

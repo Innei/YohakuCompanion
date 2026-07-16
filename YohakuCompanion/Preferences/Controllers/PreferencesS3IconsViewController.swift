@@ -12,6 +12,7 @@ import SnapKit
 @MainActor
 final class PreferencesS3IconsViewController: NSViewController, SettingWindowProtocol {
     final let frameSize: NSSize = .init(width: 1000, height: 500)
+    var onClose: (() -> Void)?
 
     private var tableView: NSTableView!
     private var scrollView: NSScrollView!
@@ -395,10 +396,11 @@ final class PreferencesS3IconsViewController: NSViewController, SettingWindowPro
     }
 
     @objc private func closeModal() {
-        // Dismiss the modal sheet
-        if let presentingViewController = presentingViewController {
-            presentingViewController.dismiss(self)
+        if let onClose {
+            onClose()
+            return
         }
+        presentingViewController?.dismiss(self)
     }
 
     @objc private func tableViewDoubleClicked(_ sender: Any) {

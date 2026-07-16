@@ -60,7 +60,7 @@ Raw bundle identifiers, executable paths, process IDs, credentials, artwork, scr
 
 - Apple Silicon Mac. Intel Macs are not supported.
 - macOS 15.0 or later.
-- A current Mix Space Core with Companion Live Desk enabled.
+- A current Mix Space Core with Companion Protocol v2 support.
 - A Yohaku deployment with its Live Desk module enabled.
 - Accessibility permission only when window-title sharing is enabled.
 
@@ -69,13 +69,7 @@ The built-in media provider works without additional software. On macOS 15.4 or 
 ## Install and pair
 
 1. Download the current DMG from [GitHub Releases](https://github.com/Innei/YohakuCompanion/releases/latest), then move **Yohaku Companion** to Applications.
-2. Enable Live Desk in Core and restart it:
-
-   ```bash
-   COMPANION_LIVE_DESK_ENABLED=true
-   ```
-
-3. Enable the module in Yohaku theme configuration:
+2. Enable the module in Yohaku theme configuration:
 
    ```json
    {
@@ -87,11 +81,11 @@ The built-in media provider works without additional software. On macOS 15.4 or 
    }
    ```
 
-4. Open the **Companion** page in Mix Space Admin and generate a one-time pairing code.
-5. In Yohaku Companion, open **Settings → Yohaku**, enter the public site URL, a device name, and the pairing code.
-6. Review **Current Sanitized Preview**, then explicitly enable Live Desk.
+3. Open the **Companion** page in Mix Space Admin and generate a one-time pairing code.
+4. In Yohaku Companion, open **Settings → Yohaku**, enter the public site URL, a device name, and the pairing code.
+5. Review **Current Sanitized Preview**, then explicitly enable Live Desk.
 
-Pairing codes expire after ten minutes and can be used only once.
+Supported Core versions expose Live Desk without a server feature flag. Pairing codes expire after ten minutes and can be used only once.
 
 > [!IMPORTANT]
 > Consult the release notes for the artifact's signing status. Until Developer ID credentials are enabled, releases are ad-hoc signed and macOS may require **Open Anyway** on first launch. An update may also require Accessibility permission to be granted again because an ad-hoc identity is not stable across builds.

@@ -22,7 +22,7 @@ S3 is not a Presence destination. It is used on demand only when an enabled Brid
 - Apple Silicon Mac (`arm64`). Intel Macs are not supported.
 - macOS 15.0 or later.
 - Yohaku Companion version `1.7.3`. This version is retained to satisfy the Core minimum-client contract.
-- A Yohaku server with the Companion Live Desk capability enabled.
+- A Yohaku server running a Mix Space Core version with Companion Protocol v2 support.
 
 ## Independent Installation
 
@@ -162,11 +162,11 @@ Application names continue to work without Accessibility permission.
 
 ### Pairing is unavailable
 
-Confirm that the server advertises the Companion Live Desk capability, Yohaku Companion is version `1.7.3` or newer than the server minimum, protected credential storage is available, and the one-time code has not expired or already been consumed.
+Confirm that the server supports Companion Protocol v2, Yohaku Companion is version `1.7.3` or newer than the server minimum, protected credential storage is available, and the one-time code has not expired or already been consumed.
 
 ### Live Desk is not publishing
 
-Confirm that pairing completed, the sanitized preview was reviewed, Live Desk was explicitly enabled, at least one application or media field remains visible after privacy rules, and the server capability is still available. Pairing alone is intentionally insufficient.
+Confirm that pairing completed, the sanitized preview was reviewed, Live Desk was explicitly enabled, and at least one application or media field remains visible after privacy rules. Pairing alone is intentionally insufficient.
 
 ### Status says Waiting for Network
 

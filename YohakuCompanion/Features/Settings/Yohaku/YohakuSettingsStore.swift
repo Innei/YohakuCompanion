@@ -148,7 +148,7 @@ final class YohakuSettingsStore: ObservableObject {
             case .presenceSchemaUnsupported:
                 return "This Yohaku server uses an incompatible Live Desk protocol."
             case .serverFeatureUnavailable:
-                return "Live Desk is not enabled on this Yohaku server."
+                return "This Yohaku server does not support Live Desk."
             case .invalidCapabilities:
                 return "This Yohaku server returned an invalid capability description."
             case .responseTooLarge, .invalidResponse, .responseDecodingFailed:
