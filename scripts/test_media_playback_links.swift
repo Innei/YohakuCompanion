@@ -1,4 +1,5 @@
 import Foundation
+import SQLite3
 
 private enum HarnessFailure: Error, CustomStringConvertible {
     case assertion(String)
@@ -22,15 +23,34 @@ private struct MediaPlaybackLinksHarness {
         defer { try? fileManager.removeItem(at: temporaryHome) }
 
         try writeQQMusicFixture(to: temporaryHome)
+        try writeQQMusicDatabaseFixture(to: temporaryHome)
         try writeNetEaseMusicFixture(to: temporaryHome)
 
         let resolver = CompanionMediaPlaybackLinkResolver(homeDirectory: temporaryHome)
         try await verifiesQQMusicResolution(resolver: resolver)
+        try await verifiesQQMusicDatabaseFallback(resolver: resolver)
         try await verifiesNetEaseMusicResolution(resolver: resolver)
         try verifiesAmbiguousMatchesFailClosed()
         try verifiesProviderURLPolicy()
         try await verifiesUnsupportedPlayersRemainUnlinked(resolver: resolver)
         print("Media playback link behavior passed")
+    }
+
+    private static func verifiesQQMusicDatabaseFallback(
+        resolver: CompanionMediaPlaybackLinkResolver
+    ) async throws {
+        let info = makeMediaInfo(
+            title: "眉南边",
+            artist: "银临",
+            album: "离地十公分·A面",
+            duration: 201,
+            applicationIdentifier: CompanionMediaPlaybackLinkQuery.qqMusicBundleIdentifier
+        )
+        let url = await resolver.resolvePlaybackURL(for: info)
+        try expect(
+            url?.absoluteString == "https://y.qq.com/n/ryqq/songDetail/000hTQrG2IWVPw",
+            "QQ Music did not fall back to the read-only song database for a radio track"
+        )
     }
 
     private static func verifiesQQMusicResolution(
@@ -233,6 +253,60 @@ private struct MediaPlaybackLinksHarness {
         ]
         let data = try JSONSerialization.data(withJSONObject: fixture, options: [.sortedKeys])
         try data.write(to: destination, options: .atomic)
+    }
+
+    private static func writeQQMusicDatabaseFixture(to home: URL) throws {
+        let destination = home
+            .appendingPathComponent("Library/Containers/com.tencent.QQMusicMac/Data/Library/Application Support/QQMusicMac", isDirectory: true)
+            .appendingPathComponent("qqmusic.sqlite", isDirectory: false)
+        try FileManager.default.createDirectory(
+            at: destination.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+
+        var database: OpaquePointer?
+        guard sqlite3_open_v2(
+            destination.path,
+            &database,
+            SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX,
+            nil
+        ) == SQLITE_OK,
+              let database
+        else {
+            if let database { sqlite3_close(database) }
+            throw HarnessFailure.assertion("could not create the QQ Music database fixture")
+        }
+        defer { sqlite3_close(database) }
+
+        let sql = """
+            CREATE TABLE SONGS (
+                id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                singer TEXT NOT NULL,
+                album TEXT NOT NULL,
+                K_SONG_RESERVE1 TEXT NOT NULL,
+                K_SONG_RESERVE12 INTEGER NOT NULL
+            );
+            INSERT INTO SONGS VALUES (
+                349164426,
+                '眉南边',
+                '银临',
+                '离地十公分·A面',
+                '000hTQrG2IWVPw',
+                201000
+            );
+            INSERT INTO SONGS VALUES (
+                1,
+                '眉南边',
+                'Other Artist',
+                'Other Album',
+                '00123456789ABC',
+                300000
+            );
+            """
+        guard sqlite3_exec(database, sql, nil, nil, nil) == SQLITE_OK else {
+            throw HarnessFailure.assertion("could not populate the QQ Music database fixture")
+        }
     }
 
     private static func expect(

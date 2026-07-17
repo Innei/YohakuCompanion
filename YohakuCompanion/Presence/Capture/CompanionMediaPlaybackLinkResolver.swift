@@ -1,4 +1,5 @@
 import Foundation
+import SQLite3
 
 protocol CompanionMediaPlaybackLinkResolving: Sendable {
     func resolvePlaybackURL(for mediaInfo: MediaInfo) async -> URL?
@@ -56,7 +57,7 @@ actor CompanionMediaPlaybackLinkResolver: CompanionMediaPlaybackLinkResolving {
     ) -> URL? {
         switch query.applicationIdentifier {
         case CompanionMediaPlaybackLinkQuery.qqMusicBundleIdentifier:
-            let url = homeDirectory
+            let applicationSupportURL = homeDirectory
                 .appendingPathComponent("Library", isDirectory: true)
                 .appendingPathComponent("Containers", isDirectory: true)
                 .appendingPathComponent("com.tencent.QQMusicMac", isDirectory: true)
@@ -64,12 +65,21 @@ actor CompanionMediaPlaybackLinkResolver: CompanionMediaPlaybackLinkResolving {
                 .appendingPathComponent("Library", isDirectory: true)
                 .appendingPathComponent("Application Support", isDirectory: true)
                 .appendingPathComponent("QQMusicMac", isDirectory: true)
+            let playingListURL = applicationSupportURL
                 .appendingPathComponent("iTemp", isDirectory: true)
                 .appendingPathComponent("PlayingList.archive", isDirectory: false)
-            guard let data = try? Data(contentsOf: url, options: [.mappedIfSafe]) else {
-                return nil
+            if let data = try? Data(contentsOf: playingListURL, options: [.mappedIfSafe]),
+               let url = QQMusicPlaybackQueue.resolve(query: query, archiveData: data)
+            {
+                return url
             }
-            return QQMusicPlaybackQueue.resolve(query: query, archiveData: data)
+            return QQMusicSongDatabase.resolve(
+                query: query,
+                databaseURL: applicationSupportURL.appendingPathComponent(
+                    "qqmusic.sqlite",
+                    isDirectory: false
+                )
+            )
 
         case CompanionMediaPlaybackLinkQuery.netEaseMusicBundleIdentifier:
             let url = homeDirectory
@@ -94,11 +104,106 @@ actor CompanionMediaPlaybackLinkResolver: CompanionMediaPlaybackLinkResolving {
     }
 }
 
+enum QQMusicSongDatabase {
+    private static let query = """
+        SELECT id, name, singer, album, K_SONG_RESERVE1, K_SONG_RESERVE12
+        FROM SONGS
+        WHERE name = ? COLLATE NOCASE
+          AND K_SONG_RESERVE1 <> ''
+        LIMIT 64
+        """
+    private static let transientDestructor = unsafeBitCast(
+        -1,
+        to: sqlite3_destructor_type.self
+    )
+
+    static func resolve(
+        query playbackQuery: CompanionMediaPlaybackLinkQuery,
+        databaseURL: URL
+    ) -> URL? {
+        guard databaseURL.isFileURL else { return nil }
+
+        var database: OpaquePointer?
+        let openResult = sqlite3_open_v2(
+            databaseURL.path,
+            &database,
+            SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX,
+            nil
+        )
+        guard openResult == SQLITE_OK, let database else {
+            if let database { sqlite3_close(database) }
+            return nil
+        }
+        defer { sqlite3_close(database) }
+        sqlite3_busy_timeout(database, 100)
+
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(database, query, -1, &statement, nil) == SQLITE_OK,
+              let statement
+        else {
+            if let statement { sqlite3_finalize(statement) }
+            return nil
+        }
+        defer { sqlite3_finalize(statement) }
+
+        let bindResult = playbackQuery.lookupTitle.withCString { title in
+            sqlite3_bind_text(statement, 1, title, -1, transientDestructor)
+        }
+        guard bindResult == SQLITE_OK else { return nil }
+
+        var candidates: [MediaPlaybackQueueTrack] = []
+        while sqlite3_step(statement) == SQLITE_ROW {
+            guard sqlite3_column_int64(statement, 0) > 0,
+                  let title = text(in: statement, column: 1),
+                  let songMID = text(in: statement, column: 4),
+                  CompanionMediaPlaybackURLPolicy.qqMusicURL(songMID: songMID) != nil
+            else {
+                continue
+            }
+
+            let singer = text(in: statement, column: 2)
+            let album = text(in: statement, column: 3)
+            let durationMilliseconds = sqlite3_column_int64(statement, 5)
+            candidates.append(
+                MediaPlaybackQueueTrack(
+                    identifier: songMID,
+                    title: title,
+                    artists: singer?
+                        .components(separatedBy: .newlines)
+                        .compactMap(MediaPlaybackQueueMatcher.normalized) ?? [],
+                    album: album,
+                    durationSeconds: durationMilliseconds > 0
+                        ? Double(durationMilliseconds) / 1_000
+                        : nil
+                )
+            )
+        }
+
+        guard let match = MediaPlaybackQueueMatcher.match(
+            query: playbackQuery,
+            candidates: candidates
+        ) else {
+            return nil
+        }
+        return CompanionMediaPlaybackURLPolicy.qqMusicURL(songMID: match.identifier)
+    }
+
+    private static func text(
+        in statement: OpaquePointer,
+        column: Int32
+    ) -> String? {
+        guard let value = sqlite3_column_text(statement, column) else { return nil }
+        let string = String(cString: value)
+        return string.isEmpty ? nil : string
+    }
+}
+
 struct CompanionMediaPlaybackLinkQuery: Equatable, Sendable {
     static let qqMusicBundleIdentifier = "com.tencent.QQMusicMac"
     static let netEaseMusicBundleIdentifier = "com.netease.163music"
 
     let applicationIdentifier: String
+    let lookupTitle: String
     let title: String
     let artist: String?
     let album: String?
@@ -108,12 +213,16 @@ struct CompanionMediaPlaybackLinkQuery: Equatable, Sendable {
         guard let applicationIdentifier = mediaInfo.applicationIdentifier,
               applicationIdentifier == Self.qqMusicBundleIdentifier
                 || applicationIdentifier == Self.netEaseMusicBundleIdentifier,
-              let title = MediaPlaybackQueueMatcher.normalized(mediaInfo.name)
+              let lookupTitle = mediaInfo.name?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              !lookupTitle.isEmpty,
+              let title = MediaPlaybackQueueMatcher.normalized(lookupTitle)
         else {
             return nil
         }
 
         self.applicationIdentifier = applicationIdentifier
+        self.lookupTitle = lookupTitle.precomposedStringWithCanonicalMapping
         self.title = title
         artist = MediaPlaybackQueueMatcher.normalized(mediaInfo.artist)
         album = MediaPlaybackQueueMatcher.normalized(mediaInfo.album)
