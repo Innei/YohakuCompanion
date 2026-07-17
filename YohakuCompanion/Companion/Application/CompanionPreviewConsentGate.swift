@@ -1,3 +1,5 @@
+import Foundation
+
 /// Stable consent projection of the publicly renderable Presence fields.
 /// `observedAt` is intentionally excluded: recapture time is not public content
 /// and must not make an otherwise identical preview stale.
@@ -20,6 +22,7 @@ struct CompanionSanitizedPreviewProjection: Equatable, Sendable {
         let artist: String?
         let album: String?
         let playerDisplayName: String?
+        let playbackURL: URL?
         let artworkContentHash: String?
         let playback: PlaybackSemantics
 
@@ -29,6 +32,7 @@ struct CompanionSanitizedPreviewProjection: Equatable, Sendable {
             artist = media.artist
             album = media.album
             playerDisplayName = media.playerDisplayName
+            playbackURL = media.playbackURL
             artworkContentHash = media.artwork?.contentHash
             playback = PlaybackSemantics(playback: media.playback)
         }

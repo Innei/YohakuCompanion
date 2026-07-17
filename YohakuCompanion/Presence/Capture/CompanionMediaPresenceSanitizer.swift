@@ -32,6 +32,7 @@ enum CompanionMediaPresenceSanitizer {
         isPlaying: Bool,
         sharesMedia: Bool,
         requiresArtist: Bool,
+        playbackURL: URL? = nil,
         artwork: SanitizedMediaArtwork? = nil
     ) throws -> SanitizedMediaPresence? {
         guard sharesMedia else { return nil }
@@ -54,6 +55,7 @@ enum CompanionMediaPresenceSanitizer {
             artist: artist,
             album: normalizedText(capturedAlbum),
             playerDisplayName: normalizedText(playerDisplayName),
+            playbackURL: playbackURL,
             playback: SanitizedMediaPlayback(
                 state: isPlaying ? .playing : .paused,
                 durationSeconds: duration,

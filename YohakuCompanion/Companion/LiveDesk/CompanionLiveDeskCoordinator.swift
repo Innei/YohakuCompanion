@@ -221,6 +221,7 @@ final class CompanionLiveDeskCoordinator {
                 mediaArtworkDeviceID = connection.metadata.deviceID
                 let mapper = CompanionPresenceDTOMapper(
                     includesMediaArtwork: configuration.supportsMediaArtwork,
+                    includesMediaPlaybackLinks: configuration.supportsMediaPlaybackLinks,
                     minimumLeaseSeconds: configuration.minimumLeaseSeconds,
                     maximumLeaseSeconds: configuration.maximumLeaseSeconds
                 )

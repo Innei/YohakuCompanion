@@ -7,6 +7,7 @@ enum CompanionPresenceMappingError: Error, Equatable, Sendable {
     case invalidActivityKey
     case invalidIconURL
     case invalidMediaArtworkURL
+    case invalidMediaPlaybackURL
     case invalidNumber(field: String)
     case invalidPlaybackRate
 }
@@ -14,17 +15,20 @@ enum CompanionPresenceMappingError: Error, Equatable, Sendable {
 struct CompanionPresenceDTOMapper: Sendable {
     private let allowedAssetHosts: Set<String>
     private let includesMediaArtwork: Bool
+    private let includesMediaPlaybackLinks: Bool
     private let minimumLeaseSeconds: Int
     private let maximumLeaseSeconds: Int
 
     init(
         allowedAssetHosts: Set<String> = [],
         includesMediaArtwork: Bool = false,
+        includesMediaPlaybackLinks: Bool = false,
         minimumLeaseSeconds: Int = 30,
         maximumLeaseSeconds: Int = 120
     ) {
         self.allowedAssetHosts = Set(allowedAssetHosts.map { $0.lowercased() })
         self.includesMediaArtwork = includesMediaArtwork
+        self.includesMediaPlaybackLinks = includesMediaPlaybackLinks
         self.minimumLeaseSeconds = minimumLeaseSeconds
         self.maximumLeaseSeconds = max(minimumLeaseSeconds, maximumLeaseSeconds)
     }
@@ -172,6 +176,12 @@ struct CompanionPresenceDTOMapper: Sendable {
         } else {
             artwork = nil
         }
+        let link: CompanionMediaLinkV2?
+        if includesMediaPlaybackLinks, let playbackURL = media.playbackURL {
+            link = try makeMediaLink(playbackURL)
+        } else {
+            link = nil
+        }
         return CompanionMediaContextV2(
             sessionID: media.sessionID.uuidString,
             kind: media.kind,
@@ -181,7 +191,9 @@ struct CompanionPresenceDTOMapper: Sendable {
             player: media.playerDisplayName.map(CompanionPlayerV2.init(displayName:)),
             playback: playback,
             artwork: artwork,
-            encodesArtwork: includesMediaArtwork
+            encodesArtwork: includesMediaArtwork,
+            link: link,
+            encodesLink: includesMediaPlaybackLinks
         )
     }
 
@@ -202,6 +214,15 @@ struct CompanionPresenceDTOMapper: Sendable {
             throw CompanionPresenceMappingError.invalidMediaArtworkURL
         }
         return CompanionMediaArtworkV2(url: url.absoluteString)
+    }
+
+    private func makeMediaLink(_ url: URL) throws -> CompanionMediaLinkV2 {
+        guard CompanionMediaPlaybackURLPolicy.isAllowed(url),
+              url.absoluteString.utf8.count <= 2_048
+        else {
+            throw CompanionPresenceMappingError.invalidMediaPlaybackURL
+        }
+        return CompanionMediaLinkV2(url: url.absoluteString)
     }
 
     private func makePlayback(

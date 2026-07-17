@@ -27,6 +27,7 @@ struct CompanionPresencePolicyFingerprint: Equatable, Sendable {
 final class CompanionPresenceCapture {
     private let mediaSessionTracker: CompanionMediaSessionTracker
     private let mediaArtworkNormalizer: CompanionMediaArtworkNormalizer
+    private let mediaPlaybackLinkResolver: any CompanionMediaPlaybackLinkResolving
     private let pausedRetentionInterval: TimeInterval
 
     private var currentMediaIdentity: CompanionMediaSemanticIdentity?
@@ -35,10 +36,13 @@ final class CompanionPresenceCapture {
     init(
         mediaSessionTracker: CompanionMediaSessionTracker? = nil,
         mediaArtworkNormalizer: CompanionMediaArtworkNormalizer = CompanionMediaArtworkNormalizer(),
+        mediaPlaybackLinkResolver: any CompanionMediaPlaybackLinkResolving =
+            CompanionMediaPlaybackLinkResolver.shared,
         pausedRetentionInterval: TimeInterval = 5 * 60
     ) {
         self.mediaSessionTracker = mediaSessionTracker ?? CompanionMediaSessionTracker()
         self.mediaArtworkNormalizer = mediaArtworkNormalizer
+        self.mediaPlaybackLinkResolver = mediaPlaybackLinkResolver
         self.pausedRetentionInterval = pausedRetentionInterval
     }
 
@@ -171,7 +175,11 @@ final class CompanionPresenceCapture {
             resetMediaContinuity()
             return nil
         }
-        let artwork = await mediaArtworkNormalizer.normalize(mediaInfo.image)
+        async let artworkResolution = mediaArtworkNormalizer.normalize(mediaInfo.image)
+        async let playbackURLResolution = mediaPlaybackLinkResolver.resolvePlaybackURL(
+            for: mediaInfo
+        )
+        let (artwork, playbackURL) = await (artworkResolution, playbackURLResolution)
         try Task.checkCancellation()
 
         // Artwork normalization runs outside the main actor. Re-read every
@@ -239,6 +247,7 @@ final class CompanionPresenceCapture {
                 isPlaying: mediaInfo.playing,
                 sharesMedia: decision.sharesMedia,
                 requiresArtist: PreferencesDataModel.ignoreNullArtist.value,
+                playbackURL: playbackURL,
                 artwork: artwork
             )
             if sanitized == nil {

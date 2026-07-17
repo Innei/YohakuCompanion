@@ -3,6 +3,7 @@ import Foundation
 enum SanitizedPresenceValidationError: Error, Equatable, Sendable {
     case missingRequiredText(field: String)
     case mediaIdentityMissing
+    case invalidMediaPlaybackURL
 }
 
 enum LiveDeskAvailability: String, Codable, Sendable {
@@ -101,6 +102,7 @@ struct SanitizedMediaPresence: Equatable, Sendable {
     let artist: String?
     let album: String?
     let playerDisplayName: String?
+    let playbackURL: URL?
     let playback: SanitizedMediaPlayback
     let artwork: SanitizedMediaArtwork?
 
@@ -111,6 +113,7 @@ struct SanitizedMediaPresence: Equatable, Sendable {
         artist: String?,
         album: String?,
         playerDisplayName: String?,
+        playbackURL: URL? = nil,
         playback: SanitizedMediaPlayback,
         artwork: SanitizedMediaArtwork? = nil
     ) throws {
@@ -119,6 +122,11 @@ struct SanitizedMediaPresence: Equatable, Sendable {
         guard normalizedTitle != nil || normalizedArtist != nil else {
             throw SanitizedPresenceValidationError.mediaIdentityMissing
         }
+        if let playbackURL,
+           !CompanionMediaPlaybackURLPolicy.isAllowed(playbackURL)
+        {
+            throw SanitizedPresenceValidationError.invalidMediaPlaybackURL
+        }
 
         self.sessionID = sessionID
         self.kind = kind
@@ -126,6 +134,7 @@ struct SanitizedMediaPresence: Equatable, Sendable {
         self.artist = normalizedArtist
         self.album = PresenceTextNormalizer.optional(album)
         self.playerDisplayName = PresenceTextNormalizer.optional(playerDisplayName)
+        self.playbackURL = playbackURL
         self.playback = playback
         self.artwork = artwork
     }
@@ -138,6 +147,7 @@ struct SanitizedMediaPresence: Equatable, Sendable {
             normalizedArtist: artist,
             normalizedAlbum: album,
             normalizedPlayerDisplayName: playerDisplayName,
+            playbackURL: playbackURL,
             playback: playback,
             artwork: artwork
         )
@@ -150,6 +160,7 @@ struct SanitizedMediaPresence: Equatable, Sendable {
         normalizedArtist: String?,
         normalizedAlbum: String?,
         normalizedPlayerDisplayName: String?,
+        playbackURL: URL?,
         playback: SanitizedMediaPlayback,
         artwork: SanitizedMediaArtwork?
     ) {
@@ -159,6 +170,7 @@ struct SanitizedMediaPresence: Equatable, Sendable {
         artist = normalizedArtist
         album = normalizedAlbum
         playerDisplayName = normalizedPlayerDisplayName
+        self.playbackURL = playbackURL
         self.playback = playback
         self.artwork = artwork
     }

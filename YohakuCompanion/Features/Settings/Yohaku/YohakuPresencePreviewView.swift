@@ -96,6 +96,16 @@ struct YohakuPresencePreviewView: View {
                             value: preview?.media?.playerDisplayName ?? "Not shared",
                             symbol: preview?.media?.playerDisplayName == nil ? "play.slash" : "play.square.fill"
                         )
+
+                        Divider()
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 2)
+
+                        previewMetric(
+                            title: "Track Link",
+                            value: trackLinkSummary,
+                            symbol: preview?.media?.playbackURL == nil ? "link.badge.plus" : "link"
+                        )
                     }
 
                     VStack(alignment: .leading, spacing: 12) {
@@ -115,6 +125,11 @@ struct YohakuPresencePreviewView: View {
                             value: preview?.media?.playerDisplayName ?? "Not shared",
                             symbol: preview?.media?.playerDisplayName == nil ? "play.slash" : "play.square.fill"
                         )
+                        previewMetric(
+                            title: "Track Link",
+                            value: trackLinkSummary,
+                            symbol: preview?.media?.playbackURL == nil ? "link.badge.plus" : "link"
+                        )
                     }
                 }
             }
@@ -123,7 +138,7 @@ struct YohakuPresencePreviewView: View {
             Divider()
 
             Label(
-                "Only these sanitized values, the current playback timeline, and the normalized cover preview can appear on Live Desk. Raw app identifiers and original artwork stay on this Mac.",
+                "Only these sanitized values, the verified track link, the current playback timeline, and the normalized cover preview can appear on Live Desk. Raw app identifiers, playback queues, and original artwork stay on this Mac.",
                 systemImage: "lock.shield"
             )
             .font(.caption)
@@ -214,5 +229,14 @@ struct YohakuPresencePreviewView: View {
             return value
         }
         return values.isEmpty ? "Not shared" : values.joined(separator: " · ")
+    }
+
+    private var trackLinkSummary: String {
+        guard let host = preview?.media?.playbackURL?.host else { return "Not shared" }
+        switch host.lowercased() {
+        case "y.qq.com": return "QQ Music"
+        case "music.163.com": return "NetEase Music"
+        default: return "Not shared"
+        }
     }
 }

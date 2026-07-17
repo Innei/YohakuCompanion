@@ -157,6 +157,10 @@ struct CompanionMediaArtworkV2: Codable, Equatable, Sendable {
     let url: String
 }
 
+struct CompanionMediaLinkV2: Codable, Equatable, Sendable {
+    let url: String
+}
+
 struct CompanionApplicationContextV2: Codable, Equatable, Sendable {
     let displayName: String
     let activity: CompanionActivityV2?
@@ -262,7 +266,9 @@ struct CompanionMediaContextV2: Codable, Equatable, Sendable {
     let player: CompanionPlayerV2?
     let playback: CompanionMediaPlaybackV2
     let artwork: CompanionMediaArtworkV2?
+    let link: CompanionMediaLinkV2?
     private let encodesArtwork: Bool
+    private let encodesLink: Bool
 
     init(
         sessionID: String,
@@ -273,7 +279,9 @@ struct CompanionMediaContextV2: Codable, Equatable, Sendable {
         player: CompanionPlayerV2?,
         playback: CompanionMediaPlaybackV2,
         artwork: CompanionMediaArtworkV2? = nil,
-        encodesArtwork: Bool = false
+        encodesArtwork: Bool = false,
+        link: CompanionMediaLinkV2? = nil,
+        encodesLink: Bool = false
     ) {
         self.sessionID = sessionID
         self.kind = kind
@@ -284,6 +292,8 @@ struct CompanionMediaContextV2: Codable, Equatable, Sendable {
         self.playback = playback
         self.artwork = artwork
         self.encodesArtwork = encodesArtwork
+        self.link = link
+        self.encodesLink = encodesLink
     }
 
     init(from decoder: Decoder) throws {
@@ -299,6 +309,10 @@ struct CompanionMediaContextV2: Codable, Equatable, Sendable {
         artwork = encodesArtwork
             ? try container.decodeRequiredNullable(CompanionMediaArtworkV2.self, forKey: .artwork)
             : nil
+        encodesLink = container.contains(.link)
+        link = encodesLink
+            ? try container.decodeRequiredNullable(CompanionMediaLinkV2.self, forKey: .link)
+            : nil
     }
 
     func encode(to encoder: Encoder) throws {
@@ -313,6 +327,9 @@ struct CompanionMediaContextV2: Codable, Equatable, Sendable {
         if encodesArtwork {
             try container.encodeNullable(artwork, forKey: .artwork)
         }
+        if encodesLink {
+            try container.encodeNullable(link, forKey: .link)
+        }
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -324,6 +341,7 @@ struct CompanionMediaContextV2: Codable, Equatable, Sendable {
         case player
         case playback
         case artwork
+        case link
     }
 }
 
@@ -470,6 +488,7 @@ struct PublicMediaPresenceV2: Decodable, Equatable, Sendable {
     let player: CompanionPlayerV2?
     let playback: PublicMediaPlaybackV2
     let artwork: CompanionMediaArtworkV2?
+    let link: CompanionMediaLinkV2?
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -481,6 +500,7 @@ struct PublicMediaPresenceV2: Decodable, Equatable, Sendable {
         player = try container.decodeRequiredNullable(CompanionPlayerV2.self, forKey: .player)
         playback = try container.decode(PublicMediaPlaybackV2.self, forKey: .playback)
         artwork = try container.decodeIfPresent(CompanionMediaArtworkV2.self, forKey: .artwork)
+        link = try container.decodeIfPresent(CompanionMediaLinkV2.self, forKey: .link)
 
         guard CompanionIdentifier.isValid(sessionID) else {
             throw CompanionProtocolDecodingError.invalidIdentifier(
@@ -498,6 +518,7 @@ struct PublicMediaPresenceV2: Decodable, Equatable, Sendable {
         case player
         case playback
         case artwork
+        case link
     }
 }
 
@@ -679,6 +700,7 @@ struct CompanionCapabilitiesV2: Decodable, Equatable, Sendable {
         let moments: Bool
         let readingSessions: Bool
         var mediaArtwork: Bool? = nil
+        var mediaPlaybackLinks: Bool? = nil
     }
 
     struct Limits: Decodable, Equatable, Sendable {

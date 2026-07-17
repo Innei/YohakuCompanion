@@ -110,6 +110,7 @@ The repository has no test target, so the pure Companion domain and transport bo
 
 ```bash
 xcrun swiftc -warnings-as-errors -strict-concurrency=complete \
+  YohakuCompanion/Companion/Domain/CompanionMediaPlaybackURLPolicy.swift \
   YohakuCompanion/Companion/Domain/SanitizedPresenceSnapshot.swift \
   YohakuCompanion/Companion/Domain/CompanionMediaSessionTracker.swift \
   YohakuCompanion/Presence/Capture/CompanionMediaPresenceSanitizer.swift \
@@ -127,10 +128,26 @@ xcrun swiftc -warnings-as-errors -strict-concurrency=complete \
 
 The harness validates observable wire behavior: explicit nulls, Unicode normalization, media privacy and source-policy sanitization, paused playback semantics, millisecond conversion, position clamping, resource-host rejection, required nullable response keys, capability negotiation, response request-ID correlation, durable concurrent sequence allocation, Authorization-only credentials, the fixed Companion version header on clear and replace, exact-request retry after an ambiguous transport failure, a deliberately early wake remaining behind the bounded cleanup task, bounded clear returning before its deadline, and schema or feature rejection selecting capability refresh rather than a blind degraded heartbeat.
 
+The supported-player playback-link resolver has a separate behavior harness:
+
+```bash
+xcrun swiftc -warnings-as-errors -strict-concurrency=complete \
+  YohakuCompanion/Core/MediaInfoManager/MediaInfo.swift \
+  YohakuCompanion/Companion/Domain/CompanionMediaPlaybackURLPolicy.swift \
+  YohakuCompanion/Presence/Capture/CompanionMediaPlaybackLinkResolver.swift \
+  scripts/test_media_playback_links.swift \
+  -o /tmp/test_media_playback_links
+
+/tmp/test_media_playback_links
+```
+
+It verifies strict local queue matching for QQ Music and NetEase Cloud Music, fail-closed behavior for ambiguous tracks, canonical provider URL construction, and rejection of spoofed or tracking-bearing URLs.
+
 The protected connection and explicit-null application capture boundary has a separate harness:
 
 ```bash
 xcrun swiftc -warnings-as-errors -strict-concurrency=complete \
+  YohakuCompanion/Companion/Domain/CompanionMediaPlaybackURLPolicy.swift \
   YohakuCompanion/Companion/Domain/SanitizedPresenceSnapshot.swift \
   YohakuCompanion/Companion/Protocol/CompanionProtocolV2.swift \
   YohakuCompanion/Companion/Protocol/CompanionCapabilityNegotiator.swift \

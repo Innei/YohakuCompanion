@@ -27,6 +27,7 @@ private struct CompanionProtocolV2Harness {
         try verifiesInvalidPlaybackIsRejected()
         try verifiesUnapprovedIconHostIsRejected()
         try verifiesMediaArtworkCapabilityEncoding()
+        try verifiesMediaPlaybackLinkCapabilityEncoding()
         try verifiesPublicStateRequiresNullableKeys()
         try verifiesResponseSchemaAndOrderingValuesAreValidated()
         try verifiesWireDatesRequireCanonicalMilliseconds()
@@ -283,6 +284,82 @@ private struct CompanionProtocolV2Harness {
         }
     }
 
+    private static func verifiesMediaPlaybackLinkCapabilityEncoding() throws {
+        let playbackURL = URL(
+            string: "https://y.qq.com/n/ryqq/songDetail/001lzbAN14boA4"
+        )!
+        let media = try SanitizedMediaPresence(
+            sessionID: UUID(),
+            kind: .music,
+            title: "Never Let You Down 秋夜独白",
+            artist: "BEAUZ",
+            album: nil,
+            playerDisplayName: "QQ Music",
+            playbackURL: playbackURL,
+            playback: SanitizedMediaPlayback(
+                state: .playing,
+                durationSeconds: 160,
+                positionSeconds: 30,
+                sampledAt: .now,
+                rate: 1
+            )
+        )
+        let snapshot = SanitizedPresenceSnapshot(
+            observedAt: .now,
+            application: nil,
+            media: media
+        )
+
+        let legacyRequest = try CompanionPresenceDTOMapper().makePresenceRequest(
+            snapshot: snapshot,
+            deviceID: deviceID,
+            sequence: 9,
+            requestID: requestID(9)
+        )
+        let legacyMedia = try dictionary(
+            try dictionary(try jsonObject(legacyRequest)["data"], path: "data")["media"],
+            path: "data.media"
+        )
+        try expect(
+            !legacyMedia.keys.contains("link"),
+            "media link was sent to a server that did not advertise it"
+        )
+
+        let request = try CompanionPresenceDTOMapper(
+            includesMediaPlaybackLinks: true
+        ).makePresenceRequest(
+            snapshot: snapshot,
+            deviceID: deviceID,
+            sequence: 10,
+            requestID: requestID(10)
+        )
+        let encodedMedia = try dictionary(
+            try dictionary(try jsonObject(request)["data"], path: "data")["media"],
+            path: "data.media"
+        )
+        let link = try dictionary(encodedMedia["link"], path: "data.media.link")
+        try expect(
+            link["url"] as? String == playbackURL.absoluteString,
+            "verified media playback URL was not encoded"
+        )
+
+        do {
+            _ = try SanitizedMediaPresence(
+                sessionID: UUID(),
+                kind: .music,
+                title: "Track",
+                artist: "Artist",
+                album: nil,
+                playerDisplayName: "Player",
+                playbackURL: URL(string: "https://example.com/song/123")!,
+                playback: media.playback
+            )
+            throw HarnessFailure.assertion("an unapproved media playback URL was accepted")
+        } catch SanitizedPresenceValidationError.invalidMediaPlaybackURL {
+            // Expected.
+        }
+    }
+
     private static func verifiesPublicStateRequiresNullableKeys() throws {
         let validEmptyState = """
         {
@@ -422,6 +499,10 @@ private struct CompanionProtocolV2Harness {
             decodedLegacy.features.mediaArtwork == nil,
             "legacy capabilities did not default artwork support to disabled"
         )
+        try expect(
+            decodedLegacy.features.mediaPlaybackLinks == nil,
+            "legacy capabilities did not default playback-link support to disabled"
+        )
 
         let limits = CompanionCapabilitiesV2.Limits(
             presencePayloadBytes: 32_768,
@@ -453,6 +534,10 @@ private struct CompanionProtocolV2Harness {
         try expect(configuration.maximumPayloadBytes == 32_768, "payload limit was lost")
         try expect(configuration.supportsMediaTimeline, "media timeline flag was lost")
         try expect(!configuration.supportsMediaArtwork, "legacy artwork support was enabled")
+        try expect(
+            !configuration.supportsMediaPlaybackLinks,
+            "legacy playback-link support was enabled"
+        )
 
         let artworkCapabilities = CompanionCapabilitiesV2(
             minimumClientVersion: "1.7.3",
@@ -463,7 +548,8 @@ private struct CompanionProtocolV2Harness {
                 mediaTimeline: true,
                 moments: false,
                 readingSessions: false,
-                mediaArtwork: true
+                mediaArtwork: true,
+                mediaPlaybackLinks: true
             ),
             limits: limits
         )
@@ -478,6 +564,10 @@ private struct CompanionProtocolV2Harness {
         try expect(
             artworkConfiguration.supportsMediaArtwork,
             "artwork capability was not negotiated"
+        )
+        try expect(
+            artworkConfiguration.supportsMediaPlaybackLinks,
+            "media playback-link capability was not negotiated"
         )
 
         let updateRequired = CompanionCapabilityNegotiator.negotiatePresence(
