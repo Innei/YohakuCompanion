@@ -38,7 +38,8 @@ struct PresenceMenuBuilder {
         let sharingItem = actionItem(
             title: "Share to Bridges",
             action: actions.toggleSharing,
-            target: actions.target
+            target: actions.target,
+            systemImage: "dot.radiowaves.left.and.right"
         )
         sharingItem.state = model.isSharing ? .on : .off
         sharingItem.isEnabled = model.canShare || model.isSharing

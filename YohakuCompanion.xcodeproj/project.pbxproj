@@ -30,7 +30,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		1FD8C8BD2DA258F3009F6BCB /* YohakuCompanion.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = YohakuCompanion.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1FD8C8BD2DA258F3009F6BCB /* YohakuCompanion_DEV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = YohakuCompanion_DEV.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DCD000062E0A100000000001 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		DCD000092E0A100000000001 /* discord_game_sdk.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = discord_game_sdk.dylib; path = Vendor/Discord/lib/discord_game_sdk.dylib; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
@@ -84,7 +84,7 @@
 		1FD8C8BE2DA258F3009F6BCB /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				1FD8C8BD2DA258F3009F6BCB /* YohakuCompanion.app */,
+				1FD8C8BD2DA258F3009F6BCB /* YohakuCompanion_DEV.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -150,7 +150,7 @@
 				5A0000032F10000000000001 /* Sparkle */,
 			);
 			productName = YohakuCompanion;
-			productReference = 1FD8C8BD2DA258F3009F6BCB /* YohakuCompanion.app */;
+			productReference = 1FD8C8BD2DA258F3009F6BCB /* YohakuCompanion_DEV.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
