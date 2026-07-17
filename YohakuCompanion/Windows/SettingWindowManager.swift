@@ -27,8 +27,11 @@ final class SettingWindowManager: NSObject {
             settingWindow = window
         }
 
+        // Opening Settings is an explicit foreground transition. The newer
+        // cooperative activation API can leave windows opened by a menu-bar
+        // application behind the currently active application.
+        NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
-        NSApp.activate()
     }
 
     func closeWindow() {

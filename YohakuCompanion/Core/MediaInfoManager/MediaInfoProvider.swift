@@ -88,6 +88,235 @@ enum MediaControlPlaybackTiming {
   }
 }
 
+/// Identifies how a media session was discovered. Supported-player sessions
+/// are queried directly by bundle identifier; the global session preserves
+/// compatibility with browsers and players without a dedicated adapter.
+enum MediaSessionSource: Int, Sendable {
+  case globalFallback
+  case supportedPlayer
+}
+
+/// A single independently queried Now Playing session before product-level
+/// selection is applied.
+struct MediaSessionCandidate: Sendable {
+  let sessionIdentifier: String
+  let info: MediaInfo
+  let source: MediaSessionSource
+  let reportedActivityDate: Date?
+
+  init(
+    sessionIdentifier: String? = nil,
+    info: MediaInfo,
+    source: MediaSessionSource,
+    reportedActivityDate: Date?
+  ) {
+    if let sessionIdentifier, !sessionIdentifier.isEmpty {
+      self.sessionIdentifier = sessionIdentifier
+    } else if let applicationIdentifier = info.applicationIdentifier,
+              !applicationIdentifier.isEmpty
+    {
+      self.sessionIdentifier = applicationIdentifier
+    } else {
+      self.sessionIdentifier = "global"
+    }
+    self.info = info
+    self.source = source
+    self.reportedActivityDate = reportedActivityDate
+  }
+}
+
+/// Stateful, deterministic arbitration for concurrent media sessions.
+///
+/// Ranking is lexicographic: playing state, explicit application preference,
+/// dedicated-adapter source, most recent transition to playing, previous
+/// winner, then a stable identifier. The state preserves the observed start
+/// time while a player changes tracks, so metadata updates do not steal focus.
+struct MediaSessionSelectionState: Sendable {
+  private struct Observation: Sendable {
+    let isPlaying: Bool
+    let lastStartedAt: Date?
+  }
+
+  private struct RankedCandidate {
+    let candidate: MediaSessionCandidate
+    let lastStartedAt: Date?
+  }
+
+  private let preferredRankByIdentifier: [String: Int]
+  private var observations: [String: Observation] = [:]
+  private var lastSelectedIdentifier: String?
+
+  init(preferredApplicationIdentifiers: [String] = []) {
+    var ranks: [String: Int] = [:]
+    for (index, identifier) in preferredApplicationIdentifiers.enumerated()
+      where ranks[identifier] == nil
+    {
+      ranks[identifier] = index
+    }
+    preferredRankByIdentifier = ranks
+  }
+
+  mutating func reset() {
+    observations.removeAll(keepingCapacity: true)
+    lastSelectedIdentifier = nil
+  }
+
+  mutating func select(
+    from candidates: [MediaSessionCandidate],
+    observedAt: Date = .now
+  ) -> MediaInfo? {
+    let candidatesByIdentifier = deduplicatedMeaningfulCandidates(candidates)
+    guard !candidatesByIdentifier.isEmpty else {
+      reset()
+      return nil
+    }
+
+    let observedIdentifiers = Set(candidatesByIdentifier.keys)
+    observations = observations.filter { observedIdentifiers.contains($0.key) }
+
+    var rankedCandidates: [RankedCandidate] = []
+    rankedCandidates.reserveCapacity(candidatesByIdentifier.count)
+
+    for (identifier, candidate) in candidatesByIdentifier {
+      let previous = observations[identifier]
+      let reportedActivityDate = normalizedActivityDate(
+        candidate.reportedActivityDate,
+        observedAt: observedAt
+      )
+
+      let lastStartedAt: Date?
+      if candidate.info.playing {
+        if let previous {
+          lastStartedAt = previous.isPlaying
+            ? (previous.lastStartedAt ?? reportedActivityDate ?? observedAt)
+            : observedAt
+        } else {
+          lastStartedAt = reportedActivityDate ?? observedAt
+        }
+      } else {
+        lastStartedAt = previous?.lastStartedAt ?? reportedActivityDate
+      }
+
+      observations[identifier] = Observation(
+        isPlaying: candidate.info.playing,
+        lastStartedAt: lastStartedAt
+      )
+      rankedCandidates.append(
+        RankedCandidate(candidate: candidate, lastStartedAt: lastStartedAt)
+      )
+    }
+
+    let previousWinner = lastSelectedIdentifier
+    let winner = rankedCandidates.sorted {
+      outranks($0, $1, previousWinner: previousWinner)
+    }.first
+    lastSelectedIdentifier = winner?.candidate.sessionIdentifier
+    return winner?.candidate.info
+  }
+
+  private func deduplicatedMeaningfulCandidates(
+    _ candidates: [MediaSessionCandidate]
+  ) -> [String: MediaSessionCandidate] {
+    var result: [String: MediaSessionCandidate] = [:]
+
+    for candidate in candidates
+      where candidate.info.name?.isEmpty == false || candidate.info.playing
+    {
+      let identifier = candidate.sessionIdentifier
+      guard let existing = result[identifier] else {
+        result[identifier] = candidate
+        continue
+      }
+
+      if shouldReplaceDuplicate(existing, with: candidate) {
+        result[identifier] = candidate
+      }
+    }
+
+    return result
+  }
+
+  private func shouldReplaceDuplicate(
+    _ existing: MediaSessionCandidate,
+    with candidate: MediaSessionCandidate
+  ) -> Bool {
+    if existing.source != candidate.source {
+      return candidate.source == .supportedPlayer
+    }
+    if existing.info.playing != candidate.info.playing {
+      return candidate.info.playing
+    }
+
+    switch (existing.reportedActivityDate, candidate.reportedActivityDate) {
+    case (.none, .some):
+      return true
+    case (.some(let existingDate), .some(let candidateDate)):
+      return candidateDate > existingDate
+    default:
+      return false
+    }
+  }
+
+  private func normalizedActivityDate(
+    _ date: Date?,
+    observedAt: Date
+  ) -> Date? {
+    guard
+      let date,
+      date.timeIntervalSince1970.isFinite,
+      date <= observedAt.addingTimeInterval(300)
+    else {
+      return nil
+    }
+    return date
+  }
+
+  private func outranks(
+    _ lhs: RankedCandidate,
+    _ rhs: RankedCandidate,
+    previousWinner: String?
+  ) -> Bool {
+    if lhs.candidate.info.playing != rhs.candidate.info.playing {
+      return lhs.candidate.info.playing
+    }
+
+    let lhsPreferredRank = preferredRankByIdentifier[
+      lhs.candidate.sessionIdentifier
+    ] ?? Int.max
+    let rhsPreferredRank = preferredRankByIdentifier[
+      rhs.candidate.sessionIdentifier
+    ] ?? Int.max
+    if lhsPreferredRank != rhsPreferredRank {
+      return lhsPreferredRank < rhsPreferredRank
+    }
+
+    if lhs.candidate.source != rhs.candidate.source {
+      return lhs.candidate.source.rawValue > rhs.candidate.source.rawValue
+    }
+
+    if lhs.lastStartedAt != rhs.lastStartedAt {
+      switch (lhs.lastStartedAt, rhs.lastStartedAt) {
+      case (.some(let lhsDate), .some(let rhsDate)):
+        return lhsDate > rhsDate
+      case (.some, .none):
+        return true
+      case (.none, .some):
+        return false
+      case (.none, .none):
+        break
+      }
+    }
+
+    let lhsWasPreviousWinner = lhs.candidate.sessionIdentifier == previousWinner
+    let rhsWasPreviousWinner = rhs.candidate.sessionIdentifier == previousWinner
+    if lhsWasPreviousWinner != rhsWasPreviousWinner {
+      return lhsWasPreviousWinner
+    }
+
+    return lhs.candidate.sessionIdentifier < rhs.candidate.sessionIdentifier
+  }
+}
+
 /// Stable state used to suppress duplicate callbacks without discarding
 /// enrichment-only changes such as artwork or process metadata.
 enum MediaInfoSnapshotKey: Equatable, Sendable {

@@ -12,14 +12,32 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
     case launchFailed
     case timedOut
     case processFailed(Int32, String)
+    case incompleteResponse
     case invalidOutput
   }
 
+  /// These players are queried independently so a paused or empty global
+  /// Now Playing session cannot hide another supported player that is active.
+  private static let supportedBundleIdentifiers = [
+    "com.tencent.QQMusicMac",
+    "com.netease.163music",
+  ]
+
   private static let script = #"""
     ObjC.import("Foundation")
+    ObjC.bindFunction("objc_msgSend", ["void", ["id", "selector", "id"]])
+
+    function isNil(value) {
+      if (value === null || value === undefined) return true
+      try {
+        return Boolean(value.isNil())
+      } catch (_) {
+        return false
+      }
+    }
 
     function unwrap(value) {
-      if (value === null || value === undefined) return null
+      if (isNil(value)) return null
       try {
         return ObjC.unwrap(value)
       } catch (_) {
@@ -27,7 +45,63 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
       }
     }
 
-    function run() {
+    function infoValue(info, key) {
+      if (isNil(info)) return null
+      return unwrap(info.objectForKey(key))
+    }
+
+    function numericValue(value) {
+      if (value === null || value === undefined) return null
+      const number = Number(value)
+      return isFinite(number) && number >= 0 ? number : null
+    }
+
+    function dateSeconds(value) {
+      if (isNil(value)) return null
+      try {
+        const seconds = Number(value.timeIntervalSince1970)
+        return isFinite(seconds) && seconds >= 0 ? seconds : null
+      } catch (_) {
+        return null
+      }
+    }
+
+    function infoDateSeconds(info, key) {
+      if (isNil(info)) return null
+      return dateSeconds(info.objectForKey(key))
+    }
+
+    function snapshot(info, bundleIdentifier, source, playing, activityDate) {
+      const playbackRate = numericValue(
+        infoValue(info, "kMRMediaRemoteNowPlayingInfoPlaybackRate")
+      )
+      return {
+        activityDate: activityDate,
+        album: infoValue(info, "kMRMediaRemoteNowPlayingInfoAlbum"),
+        artist: infoValue(info, "kMRMediaRemoteNowPlayingInfoArtist"),
+        bundleIdentifier: bundleIdentifier,
+        duration: infoValue(info, "kMRMediaRemoteNowPlayingInfoDuration"),
+        elapsedTime: infoValue(info, "kMRMediaRemoteNowPlayingInfoElapsedTime"),
+        playbackRate: playbackRate,
+        playing: playing === null ? playbackRate !== null && playbackRate > 0 : playing,
+        source: source,
+        title: infoValue(info, "kMRMediaRemoteNowPlayingInfoTitle")
+      }
+    }
+
+    // JavaScriptObjC cannot pass a JavaScript callback directly to a method
+    // whose block signature comes only from a private framework. A Foundation
+    // block-taking API materializes the native block; the holder remains alive
+    // until every MediaRemote callback has completed.
+    function materializeNativeBlock(callback) {
+      const holder = $.NSPredicate.predicateWithBlock(callback)
+      return {
+        block: holder.valueForKey("block"),
+        holder: holder
+      }
+    }
+
+    function run(bundleIdentifiers) {
       const framework = $.NSBundle.bundleWithPath(
         "/System/Library/PrivateFrameworks/MediaRemote.framework"
       )
@@ -35,35 +109,148 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
         throw new Error("Unable to load MediaRemote.framework")
       }
 
-      const request = $.NSClassFromString("MRNowPlayingRequest")
-      if (!request) {
-        throw new Error("MRNowPlayingRequest is unavailable")
+      const MROrigin = $.NSClassFromString("MROrigin")
+      const MRPlayer = $.NSClassFromString("MRPlayer")
+      const MRPlayerPath = $.NSClassFromString("MRPlayerPath")
+      const MRNowPlayingRequest = $.NSClassFromString("MRNowPlayingRequest")
+      if (
+        isNil(MROrigin) ||
+        isNil(MRPlayer) ||
+        isNil(MRPlayerPath) ||
+        isNil(MRNowPlayingRequest)
+      ) {
+        throw new Error("Required MediaRemote classes are unavailable")
       }
 
-      const playerPath = request.localNowPlayingPlayerPath
-      const client = playerPath ? playerPath.client : null
-      const item = request.localNowPlayingItem
-      const info = item ? item.nowPlayingInfo : null
+      const candidates = []
+      const states = []
+      const keepAlive = []
+      const infoSelector = $.NSSelectorFromString(
+        "requestNowPlayingInfoWithCompletion:"
+      )
+      const lastPlayingDateSelector = $.NSSelectorFromString(
+        "requestLastPlayingDateWithCompletion:"
+      )
 
-      function infoValue(key) {
-        if (!info) return null
-        return unwrap(info.objectForKey(key))
-      }
-
-      const parentBundleIdentifier = client
+      const playerPath = MRNowPlayingRequest.localNowPlayingPlayerPath
+      const client = isNil(playerPath) ? null : playerPath.client
+      const item = MRNowPlayingRequest.localNowPlayingItem
+      const info = isNil(item) ? null : item.nowPlayingInfo
+      const parentBundleIdentifier = !isNil(client)
         ? unwrap(client.parentApplicationBundleIdentifier)
         : null
       const bundleIdentifier = parentBundleIdentifier ||
-        (client ? unwrap(client.bundleIdentifier) : null)
+        (!isNil(client) ? unwrap(client.bundleIdentifier) : null)
+
+      candidates.push(
+        snapshot(
+          info,
+          bundleIdentifier,
+          "global",
+          Boolean(MRNowPlayingRequest.localIsPlaying),
+          infoDateSeconds(info, "kMRMediaRemoteNowPlayingInfoTimestamp")
+        )
+      )
+
+      for (const supportedBundleIdentifier of bundleIdentifiers) {
+        const state = {
+          bundleIdentifier: supportedBundleIdentifier,
+          dateCompleted: false,
+          info: null,
+          infoCompleted: false,
+          infoError: null,
+          lastPlayingDate: null
+        }
+        states.push(state)
+
+        try {
+          const path = MRPlayerPath.alloc.initWithOriginBundleIdentifierPlayer(
+            MROrigin.localOrigin,
+            supportedBundleIdentifier,
+            MRPlayer.defaultPlayer
+          )
+          const request = MRNowPlayingRequest.alloc.initWithPlayerPath(path)
+
+          if (!request.respondsToSelector(infoSelector)) {
+            state.infoCompleted = true
+            state.dateCompleted = true
+            continue
+          }
+
+          const infoCallback = ObjC.block(
+            ["void", ["id", "id"]],
+            function(nowPlayingInfo, error) {
+              state.infoCompleted = true
+              state.infoError = isNil(error)
+                ? null
+                : unwrap(error.localizedDescription)
+              state.info = isNil(nowPlayingInfo) ? null : nowPlayingInfo
+            }
+          )
+          const infoBridge = materializeNativeBlock(infoCallback)
+
+          keepAlive.push(
+            path,
+            request,
+            infoCallback,
+            infoBridge.holder,
+            infoBridge.block
+          )
+          $.objc_msgSend(request, infoSelector, infoBridge.block)
+
+          if (request.respondsToSelector(lastPlayingDateSelector)) {
+            const dateCallback = ObjC.block(
+              ["void", ["id", "id"]],
+              function(lastPlayingDate, _) {
+                state.dateCompleted = true
+                state.lastPlayingDate = dateSeconds(lastPlayingDate)
+              }
+            )
+            const dateBridge = materializeNativeBlock(dateCallback)
+            keepAlive.push(dateCallback, dateBridge.holder, dateBridge.block)
+            $.objc_msgSend(request, lastPlayingDateSelector, dateBridge.block)
+          } else {
+            state.dateCompleted = true
+          }
+        } catch (_) {
+          // Keep the existing global provider behavior when a future macOS
+          // release removes a targeted selector for one adapted player.
+          state.infoCompleted = true
+          state.dateCompleted = true
+        }
+      }
+
+      const deadline = $.NSDate.dateWithTimeIntervalSinceNow(1.25)
+      while (
+        states.some(state => !state.infoCompleted || !state.dateCompleted) &&
+        Number(deadline.timeIntervalSinceNow) > 0
+      ) {
+        $.NSRunLoop.currentRunLoop.runUntilDate(
+          $.NSDate.dateWithTimeIntervalSinceNow(0.02)
+        )
+      }
+
+      for (const state of states) {
+        if (
+          state.infoCompleted &&
+          state.infoError === null &&
+          !isNil(state.info)
+        ) {
+          candidates.push(
+            snapshot(
+              state.info,
+              state.bundleIdentifier,
+              "supported",
+              null,
+              state.lastPlayingDate
+            )
+          )
+        }
+      }
 
       return JSON.stringify({
-        album: infoValue("kMRMediaRemoteNowPlayingInfoAlbum"),
-        artist: infoValue("kMRMediaRemoteNowPlayingInfoArtist"),
-        bundleIdentifier: bundleIdentifier,
-        duration: infoValue("kMRMediaRemoteNowPlayingInfoDuration"),
-        elapsedTime: infoValue("kMRMediaRemoteNowPlayingInfoElapsedTime"),
-        playing: Boolean(request.localIsPlaying),
-        title: infoValue("kMRMediaRemoteNowPlayingInfoTitle")
+        candidates: candidates,
+        complete: states.every(state => state.infoCompleted)
       })
     }
     """#
@@ -80,10 +267,18 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
   private var isMonitoring = false
   private var hasEmitted = false
   private var lastSnapshotKey: MediaInfoSnapshotKey?
+  private var selectionState: MediaSessionSelectionState
 
-  init(pollInterval: TimeInterval = 1, requestTimeout: TimeInterval = 2) {
+  init(
+    pollInterval: TimeInterval = 1,
+    requestTimeout: TimeInterval = 2,
+    preferredApplicationIdentifiers: [String] = []
+  ) {
     self.pollInterval = max(0.1, pollInterval)
     self.requestTimeout = max(0.1, requestTimeout)
+    selectionState = MediaSessionSelectionState(
+      preferredApplicationIdentifiers: preferredApplicationIdentifiers
+    )
   }
 
   func startMonitoring(callback: @escaping MediaInfoProviderCallback) {
@@ -114,6 +309,7 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
     callback = nil
     hasEmitted = false
     lastSnapshotKey = nil
+    selectionState.reset()
     let timer = self.timer
     self.timer = nil
     stateLock.unlock()
@@ -151,13 +347,18 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
     }
     defer { executionGate.signal() }
 
+    stateLock.lock()
+    let selectionGeneration = monitoringGeneration
+    stateLock.unlock()
+
     let elapsed = ProcessInfo.processInfo.systemUptime - startedAt
     let remaining = timeout - elapsed
     guard remaining > 0 else { return .failure(.timedOut) }
 
     switch ExternalProcessRunner.run(
       executableURL: URL(fileURLWithPath: "/usr/bin/osascript"),
-      arguments: ["-l", "JavaScript", "-e", Self.script],
+      arguments: ["-l", "JavaScript", "-e", Self.script, "--"]
+        + Self.supportedBundleIdentifiers,
       timeout: remaining
     ) {
     case .launchFailed:
@@ -172,13 +373,49 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
 
       guard
         let json = try? JSONSerialization.jsonObject(with: output),
-        let dictionary = json as? [String: Any]
+        let root = json as? [String: Any],
+        let complete = root["complete"] as? Bool,
+        let dictionaries = root["candidates"] as? [[String: Any]]
       else {
         return .failure(.invalidOutput)
       }
+      guard complete else { return .failure(.incompleteResponse) }
 
-      return .success(makeMediaInfo(from: dictionary))
+      let candidates = dictionaries.compactMap { makeCandidate(from: $0) }
+      stateLock.lock()
+      guard selectionGeneration == monitoringGeneration else {
+        stateLock.unlock()
+        return .failure(.incompleteResponse)
+      }
+      let selected = selectionState.select(from: candidates, observedAt: .now)
+      stateLock.unlock()
+
+      return .success(selected)
     }
+  }
+
+  private func makeCandidate(from dictionary: [String: Any]) -> MediaSessionCandidate? {
+    guard let info = makeMediaInfo(from: dictionary) else { return nil }
+
+    let source: MediaSessionSource
+    switch nonEmptyString(dictionary["source"]) {
+    case "supported":
+      source = .supportedPlayer
+    case "global":
+      source = .globalFallback
+    default:
+      return nil
+    }
+
+    let activityDate = numberValue(dictionary["activityDate"]).map {
+      Date(timeIntervalSince1970: $0)
+    }
+    return MediaSessionCandidate(
+      sessionIdentifier: info.applicationIdentifier,
+      info: info,
+      source: source,
+      reportedActivityDate: activityDate
+    )
   }
 
   private func makeMediaInfo(from dictionary: [String: Any]) -> MediaInfo? {

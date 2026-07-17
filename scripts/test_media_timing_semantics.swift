@@ -32,6 +32,7 @@ private struct MediaTimingSemanticsHarness {
     try verifyMediaControlTiming()
     try verifyMediaInfoNormalization()
     try verifyAdaptiveMerge()
+    try verifyMultiSessionSelection()
 
     print("Media timing semantics behavior passed")
   }
@@ -189,6 +190,134 @@ private struct MediaTimingSemanticsHarness {
     )
   }
 
+  private static func verifyMultiSessionSelection() throws {
+    let qqMusic = "com.tencent.QQMusicMac"
+    let neteaseMusic = "com.netease.163music"
+    let chrome = "com.google.Chrome"
+    let observedAt = Date(timeIntervalSince1970: 1_000)
+
+    var pausedGlobalState = MediaSessionSelectionState()
+    let selectedOverPausedGlobal = pausedGlobalState.select(
+      from: [
+        candidate(
+          applicationIdentifier: qqMusic,
+          source: .supportedPlayer,
+          playing: true,
+          activityDate: Date(timeIntervalSince1970: 900)
+        ),
+        candidate(
+          applicationIdentifier: chrome,
+          source: .globalFallback,
+          playing: false,
+          activityDate: Date(timeIntervalSince1970: 990)
+        ),
+      ],
+      observedAt: observedAt
+    )
+    try expect(
+      selectedOverPausedGlobal?.applicationIdentifier == qqMusic,
+      "a paused global session masked a supported player that was playing"
+    )
+
+    var emptySessionState = MediaSessionSelectionState()
+    let emptySession = candidate(
+      applicationIdentifier: neteaseMusic,
+      source: .supportedPlayer,
+      playing: false,
+      name: nil,
+      activityDate: nil
+    )
+    try expect(
+      emptySessionState.select(from: [emptySession], observedAt: observedAt) == nil,
+      "an opened player without media became the selected session"
+    )
+
+    var simultaneousState = MediaSessionSelectionState()
+    let qqCandidate = candidate(
+      applicationIdentifier: qqMusic,
+      source: .supportedPlayer,
+      playing: true,
+      activityDate: Date(timeIntervalSince1970: 900)
+    )
+    let neteaseCandidate = candidate(
+      applicationIdentifier: neteaseMusic,
+      source: .supportedPlayer,
+      playing: true,
+      activityDate: Date(timeIntervalSince1970: 950)
+    )
+    let mostRecentlyStarted = simultaneousState.select(
+      from: [qqCandidate, neteaseCandidate],
+      observedAt: observedAt
+    )
+    try expect(
+      mostRecentlyStarted?.applicationIdentifier == neteaseMusic,
+      "the most recently started supported player was not selected"
+    )
+
+    let qqMetadataChanged = candidate(
+      applicationIdentifier: qqMusic,
+      source: .supportedPlayer,
+      playing: true,
+      activityDate: Date(timeIntervalSince1970: 990)
+    )
+    let selectionAfterMetadataChange = simultaneousState.select(
+      from: [qqMetadataChanged, neteaseCandidate],
+      observedAt: Date(timeIntervalSince1970: 1_010)
+    )
+    try expect(
+      selectionAfterMetadataChange?.applicationIdentifier == neteaseMusic,
+      "a track metadata update replaced the actual most recently started player"
+    )
+
+    let qqPaused = candidate(
+      applicationIdentifier: qqMusic,
+      source: .supportedPlayer,
+      playing: false,
+      activityDate: Date(timeIntervalSince1970: 990)
+    )
+    _ = simultaneousState.select(
+      from: [qqPaused, neteaseCandidate],
+      observedAt: Date(timeIntervalSince1970: 1_020)
+    )
+    let selectionAfterResume = simultaneousState.select(
+      from: [qqCandidate, neteaseCandidate],
+      observedAt: Date(timeIntervalSince1970: 1_030)
+    )
+    try expect(
+      selectionAfterResume?.applicationIdentifier == qqMusic,
+      "a supported player did not regain priority after resuming playback"
+    )
+
+    var preferredState = MediaSessionSelectionState(
+      preferredApplicationIdentifiers: [qqMusic, neteaseMusic]
+    )
+    let explicitlyPreferred = preferredState.select(
+      from: [qqCandidate, neteaseCandidate],
+      observedAt: observedAt
+    )
+    try expect(
+      explicitlyPreferred?.applicationIdentifier == qqMusic,
+      "explicit application priority did not override activity recency"
+    )
+
+    var globalFallbackState = MediaSessionSelectionState()
+    let globalFallback = globalFallbackState.select(
+      from: [
+        candidate(
+          applicationIdentifier: chrome,
+          source: .globalFallback,
+          playing: true,
+          activityDate: Date(timeIntervalSince1970: 990)
+        )
+      ],
+      observedAt: observedAt
+    )
+    try expect(
+      globalFallback?.applicationIdentifier == chrome,
+      "the global session was not retained for an unsupported player"
+    )
+  }
+
   private static func merged(
     authoritative: MediaInfo,
     enrichment: MediaInfoFetchResult
@@ -205,9 +334,11 @@ private struct MediaTimingSemanticsHarness {
   }
 
   private static func media(
-    name: String = "Track",
+    name: String? = "Track",
     duration: Double?,
-    elapsedTime: Double?
+    elapsedTime: Double?,
+    playing: Bool = true,
+    applicationIdentifier: String = "example.player"
   ) -> MediaInfo {
     MediaInfo(
       name: name,
@@ -219,8 +350,28 @@ private struct MediaTimingSemanticsHarness {
       processID: 0,
       processName: "Player",
       executablePath: "",
-      playing: true,
-      applicationIdentifier: "example.player"
+      playing: playing,
+      applicationIdentifier: applicationIdentifier
+    )
+  }
+
+  private static func candidate(
+    applicationIdentifier: String,
+    source: MediaSessionSource,
+    playing: Bool,
+    name: String? = "Track",
+    activityDate: Date?
+  ) -> MediaSessionCandidate {
+    MediaSessionCandidate(
+      info: media(
+        name: name,
+        duration: playing ? 180 : nil,
+        elapsedTime: playing ? 30 : nil,
+        playing: playing,
+        applicationIdentifier: applicationIdentifier
+      ),
+      source: source,
+      reportedActivityDate: activityDate
     )
   }
 
