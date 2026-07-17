@@ -5,25 +5,32 @@ protocol CompanionMediaPlaybackLinkResolving: Sendable {
     func resolvePlaybackURL(for mediaInfo: MediaInfo) async -> URL?
 }
 
+typealias QQMusicSongDetailsLoader = @Sendable ([String]) async -> [MediaPlaybackQueueTrack]
+
 actor CompanionMediaPlaybackLinkResolver: CompanionMediaPlaybackLinkResolving {
     static let shared = CompanionMediaPlaybackLinkResolver()
 
     private struct CachedResolution: Sendable {
         let query: CompanionMediaPlaybackLinkQuery
-        let url: URL
+        let url: URL?
         let resolvedAt: Date
     }
 
     private let homeDirectory: URL
     private let cacheLifetime: TimeInterval
+    private let qqMusicSongDetailsLoader: QQMusicSongDetailsLoader
     private var cachedResolution: CachedResolution?
 
     init(
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
-        cacheLifetime: TimeInterval = 15
+        cacheLifetime: TimeInterval = 15,
+        qqMusicSongDetailsLoader: @escaping QQMusicSongDetailsLoader = {
+            await QQMusicSongDetails.fetch(songMIDs: $0)
+        }
     ) {
         self.homeDirectory = homeDirectory
         self.cacheLifetime = max(0, cacheLifetime)
+        self.qqMusicSongDetailsLoader = qqMusicSongDetailsLoader
     }
 
     func resolvePlaybackURL(for mediaInfo: MediaInfo) async -> URL? {
@@ -38,14 +45,19 @@ actor CompanionMediaPlaybackLinkResolver: CompanionMediaPlaybackLinkResolving {
         }
 
         let homeDirectory = homeDirectory
+        let qqMusicSongDetailsLoader = qqMusicSongDetailsLoader
         let task = Task.detached(priority: .utility) {
-            Self.resolve(query: query, homeDirectory: homeDirectory)
+            await Self.resolve(
+                query: query,
+                homeDirectory: homeDirectory,
+                qqMusicSongDetailsLoader: qqMusicSongDetailsLoader
+            )
         }
         let url = await withTaskCancellationHandler(
             operation: { await task.value },
             onCancel: { task.cancel() }
         )
-        guard !Task.isCancelled, let url else { return nil }
+        guard !Task.isCancelled else { return nil }
 
         cachedResolution = CachedResolution(query: query, url: url, resolvedAt: .now)
         return url
@@ -53,8 +65,9 @@ actor CompanionMediaPlaybackLinkResolver: CompanionMediaPlaybackLinkResolving {
 
     private nonisolated static func resolve(
         query: CompanionMediaPlaybackLinkQuery,
-        homeDirectory: URL
-    ) -> URL? {
+        homeDirectory: URL,
+        qqMusicSongDetailsLoader: QQMusicSongDetailsLoader
+    ) async -> URL? {
         switch query.applicationIdentifier {
         case CompanionMediaPlaybackLinkQuery.qqMusicBundleIdentifier:
             let applicationSupportURL = homeDirectory
@@ -73,13 +86,33 @@ actor CompanionMediaPlaybackLinkResolver: CompanionMediaPlaybackLinkResolving {
             {
                 return url
             }
-            return QQMusicSongDatabase.resolve(
+            if let url = QQMusicSongDatabase.resolve(
                 query: query,
                 databaseURL: applicationSupportURL.appendingPathComponent(
                     "qqmusic.sqlite",
                     isDirectory: false
                 )
+            ) {
+                return url
+            }
+
+            let songMIDs = QQMusicAutoMixCache.recentSongMIDs(
+                directoryURL: applicationSupportURL.appendingPathComponent(
+                    "AutoMixMir",
+                    isDirectory: true
+                )
             )
+            guard !songMIDs.isEmpty, !Task.isCancelled else { return nil }
+            let candidates = await qqMusicSongDetailsLoader(songMIDs)
+            guard !Task.isCancelled,
+                  let match = MediaPlaybackQueueMatcher.match(
+                    query: query,
+                    candidates: candidates
+                  )
+            else {
+                return nil
+            }
+            return CompanionMediaPlaybackURLPolicy.qqMusicURL(songMID: match.identifier)
 
         case CompanionMediaPlaybackLinkQuery.netEaseMusicBundleIdentifier:
             let url = homeDirectory
@@ -100,6 +133,151 @@ actor CompanionMediaPlaybackLinkResolver: CompanionMediaPlaybackLinkResolving {
 
         default:
             return nil
+        }
+    }
+}
+
+enum QQMusicAutoMixCache {
+    private struct Entry {
+        let songMID: String
+        let activityDate: Date
+    }
+
+    private static let maximumCandidateCount = 16
+
+    static func recentSongMIDs(directoryURL: URL) -> [String] {
+        guard directoryURL.isFileURL else { return [] }
+
+        let resourceKeys: Set<URLResourceKey> = [
+            .isRegularFileKey,
+            .contentAccessDateKey,
+            .contentModificationDateKey,
+            .creationDateKey,
+        ]
+        guard let fileURLs = try? FileManager.default.contentsOfDirectory(
+            at: directoryURL,
+            includingPropertiesForKeys: Array(resourceKeys),
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+
+        return fileURLs.compactMap { fileURL -> Entry? in
+            guard fileURL.pathExtension.lowercased() == "mir",
+                  let values = try? fileURL.resourceValues(forKeys: resourceKeys),
+                  values.isRegularFile == true
+            else {
+                return nil
+            }
+
+            let songMID = fileURL.deletingPathExtension().lastPathComponent
+            guard CompanionMediaPlaybackURLPolicy.qqMusicURL(songMID: songMID) != nil else {
+                return nil
+            }
+            let activityDate = [
+                values.contentAccessDate,
+                values.contentModificationDate,
+                values.creationDate,
+            ]
+            .compactMap { $0 }
+            .max() ?? .distantPast
+            return Entry(songMID: songMID, activityDate: activityDate)
+        }
+        .sorted { left, right in
+            if left.activityDate != right.activityDate {
+                return left.activityDate > right.activityDate
+            }
+            return left.songMID < right.songMID
+        }
+        .prefix(maximumCandidateCount)
+        .map(\.songMID)
+    }
+}
+
+enum QQMusicSongDetails {
+    private struct Response: Decodable {
+        let code: Int
+        let data: [Song]
+    }
+
+    private struct Song: Decodable {
+        struct Singer: Decodable {
+            let name: String?
+        }
+
+        struct Album: Decodable {
+            let name: String?
+        }
+
+        let mid: String
+        let name: String?
+        let interval: Int?
+        let singer: [Singer]?
+        let album: Album?
+    }
+
+    private static let maximumResponseBytes = 1_000_000
+
+    static func fetch(songMIDs: [String]) async -> [MediaPlaybackQueueTrack] {
+        guard !songMIDs.isEmpty else { return [] }
+
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "c.y.qq.com"
+        components.path = "/v8/fcg-bin/fcg_play_single_song.fcg"
+        components.queryItems = [
+            URLQueryItem(name: "format", value: "json"),
+            URLQueryItem(name: "songmid", value: songMIDs.joined(separator: ",")),
+        ]
+        guard let url = components.url else { return [] }
+
+        var request = URLRequest(
+            url: url,
+            cachePolicy: .reloadIgnoringLocalCacheData,
+            timeoutInterval: 3
+        )
+        request.httpMethod = "GET"
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let response = response as? HTTPURLResponse,
+                  response.statusCode == 200,
+                  data.count <= maximumResponseBytes
+            else {
+                return []
+            }
+            return tracks(from: data, requestedSongMIDs: songMIDs)
+        } catch {
+            return []
+        }
+    }
+
+    static func tracks(
+        from data: Data,
+        requestedSongMIDs: [String]
+    ) -> [MediaPlaybackQueueTrack] {
+        guard data.count <= maximumResponseBytes,
+              let response = try? JSONDecoder().decode(Response.self, from: data),
+              response.code == 0
+        else {
+            return []
+        }
+
+        let requestedSongMIDs = Set(requestedSongMIDs)
+        return response.data.compactMap { song in
+            guard requestedSongMIDs.contains(song.mid),
+                  CompanionMediaPlaybackURLPolicy.qqMusicURL(songMID: song.mid) != nil,
+                  let title = song.name
+            else {
+                return nil
+            }
+            return MediaPlaybackQueueTrack(
+                identifier: song.mid,
+                title: title,
+                artists: song.singer?.compactMap(\.name) ?? [],
+                album: song.album?.name,
+                durationSeconds: song.interval.flatMap { $0 > 0 ? Double($0) : nil }
+            )
         }
     }
 }

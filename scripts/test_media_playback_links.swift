@@ -24,11 +24,22 @@ private struct MediaPlaybackLinksHarness {
 
         try writeQQMusicFixture(to: temporaryHome)
         try writeQQMusicDatabaseFixture(to: temporaryHome)
+        try writeQQMusicAutoMixFixture(to: temporaryHome)
         try writeNetEaseMusicFixture(to: temporaryHome)
 
-        let resolver = CompanionMediaPlaybackLinkResolver(homeDirectory: temporaryHome)
+        let songDetailsData = try makeQQMusicSongDetailsFixture()
+        let resolver = CompanionMediaPlaybackLinkResolver(
+            homeDirectory: temporaryHome,
+            qqMusicSongDetailsLoader: { songMIDs in
+                QQMusicSongDetails.tracks(
+                    from: songDetailsData,
+                    requestedSongMIDs: songMIDs
+                )
+            }
+        )
         try await verifiesQQMusicResolution(resolver: resolver)
         try await verifiesQQMusicDatabaseFallback(resolver: resolver)
+        try await verifiesQQMusicAutoMixFallback(resolver: resolver)
         try await verifiesNetEaseMusicResolution(resolver: resolver)
         try verifiesAmbiguousMatchesFailClosed()
         try verifiesProviderURLPolicy()
@@ -67,6 +78,23 @@ private struct MediaPlaybackLinksHarness {
         try expect(
             url?.absoluteString == "https://y.qq.com/n/ryqq/songDetail/001lzbAN14boA4",
             "QQ Music did not resolve the current queue entry's song_Mid"
+        )
+    }
+
+    private static func verifiesQQMusicAutoMixFallback(
+        resolver: CompanionMediaPlaybackLinkResolver
+    ) async throws {
+        let info = makeMediaInfo(
+            title: "问棋",
+            artist: "扇宝",
+            album: "问棋",
+            duration: 193,
+            applicationIdentifier: CompanionMediaPlaybackLinkQuery.qqMusicBundleIdentifier
+        )
+        let url = await resolver.resolvePlaybackURL(for: info)
+        try expect(
+            url?.absoluteString == "https://y.qq.com/n/ryqq/songDetail/000sxYlY1Oho1M",
+            "QQ Music did not resolve a radio track from its AutoMix song MID cache"
         )
     }
 
@@ -307,6 +335,55 @@ private struct MediaPlaybackLinksHarness {
         guard sqlite3_exec(database, sql, nil, nil, nil) == SQLITE_OK else {
             throw HarnessFailure.assertion("could not populate the QQ Music database fixture")
         }
+    }
+
+    private static func writeQQMusicAutoMixFixture(to home: URL) throws {
+        let directory = home
+            .appendingPathComponent(
+                "Library/Containers/com.tencent.QQMusicMac/Data/Library/Application Support/QQMusicMac/AutoMixMir",
+                isDirectory: true
+            )
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        for filename in [
+            "000sxYlY1Oho1M.mir",
+            "000m07jK2MRSVg.mir",
+            "not-a-song-id.mir",
+        ] {
+            try Data().write(to: directory.appendingPathComponent(filename))
+        }
+    }
+
+    private static func makeQQMusicSongDetailsFixture() throws -> Data {
+        let response: [String: Any] = [
+            "code": 0,
+            "data": [
+                [
+                    "mid": "000sxYlY1Oho1M",
+                    "name": "问棋",
+                    "interval": 193,
+                    "singer": [["name": "扇宝"]],
+                    "album": ["name": "问棋"],
+                ],
+                [
+                    "mid": "000m07jK2MRSVg",
+                    "name": "Goldfish Song",
+                    "interval": 159,
+                    "singer": [["name": "Goodmorning Pancake"]],
+                    "album": ["name": "Ah!Chim!"],
+                ],
+                [
+                    "mid": "00123456789ABC",
+                    "name": "问棋",
+                    "interval": 193,
+                    "singer": [["name": "扇宝"]],
+                    "album": ["name": "问棋"],
+                ],
+            ],
+        ]
+        return try JSONSerialization.data(withJSONObject: response, options: [.sortedKeys])
     }
 
     private static func expect(
