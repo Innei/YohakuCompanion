@@ -342,7 +342,7 @@
 				CODE_SIGN_ENTITLEMENTS = YohakuCompanion/YohakuCompanion.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = 7VYQTBFBS5;
 				ENABLE_HARDENED_RUNTIME = YES;
 				EXECUTABLE_NAME = YohakuCompanion;
@@ -368,7 +368,7 @@
 					"$(PROJECT_DIR)/Vendor/Discord/lib",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.7.4;
+				MARKETING_VERSION = 1.7.5;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-lc++",
@@ -394,7 +394,7 @@
 				CODE_SIGN_ENTITLEMENTS = YohakuCompanion/YohakuCompanion.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEVELOPMENT_TEAM = 7VYQTBFBS5;
 				ENABLE_HARDENED_RUNTIME = YES;
 				EXECUTABLE_NAME = YohakuCompanion;
@@ -420,7 +420,7 @@
 					"$(PROJECT_DIR)/Vendor/Discord/lib",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.7.4;
+				MARKETING_VERSION = 1.7.5;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-lc++",
