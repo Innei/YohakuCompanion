@@ -26,6 +26,7 @@ private struct CompanionProtocolV2Harness {
         try verifiesMillisecondsAndPositionClamp()
         try verifiesInvalidPlaybackIsRejected()
         try verifiesUnapprovedIconHostIsRejected()
+        try verifiesMediaArtworkCapabilityEncoding()
         try verifiesPublicStateRequiresNullableKeys()
         try verifiesResponseSchemaAndOrderingValuesAreValidated()
         try verifiesWireDatesRequireCanonicalMilliseconds()
@@ -198,6 +199,90 @@ private struct CompanionProtocolV2Harness {
         }
     }
 
+    private static func verifiesMediaArtworkCapabilityEncoding() throws {
+        let hash = String(repeating: "a", count: 64)
+        let hostedArtwork = SanitizedMediaArtwork(
+            pngData: Data([0x89, 0x50, 0x4E, 0x47]),
+            contentHash: hash,
+            pixelWidth: 1,
+            pixelHeight: 1,
+            publicURL: URL(
+                string: "https://media.example.com/current.png?v=\(hash)"
+            )
+        )
+        let media = try SanitizedMediaPresence(
+            sessionID: UUID(),
+            kind: .music,
+            title: "Track",
+            artist: "Artist",
+            album: nil,
+            playerDisplayName: "Music",
+            playback: SanitizedMediaPlayback(
+                state: .playing,
+                durationSeconds: 180,
+                positionSeconds: 30,
+                sampledAt: .now,
+                rate: 1
+            ),
+            artwork: hostedArtwork
+        )
+        let snapshot = SanitizedPresenceSnapshot(
+            observedAt: .now,
+            application: nil,
+            media: media
+        )
+
+        let legacyRequest = try CompanionPresenceDTOMapper().makePresenceRequest(
+            snapshot: snapshot,
+            deviceID: deviceID,
+            sequence: 6,
+            requestID: requestID(6)
+        )
+        let legacyData = try dictionary(
+            try dictionary(try jsonObject(legacyRequest)["data"], path: "data")["media"],
+            path: "data.media"
+        )
+        try expect(
+            !legacyData.keys.contains("artwork"),
+            "artwork was sent to a server that did not advertise it"
+        )
+
+        let mapper = CompanionPresenceDTOMapper(
+            includesMediaArtwork: true
+        )
+        let request = try mapper.makePresenceRequest(
+            snapshot: snapshot,
+            deviceID: deviceID,
+            sequence: 7,
+            requestID: requestID(7)
+        )
+        let encodedMedia = try dictionary(
+            try dictionary(try jsonObject(request)["data"], path: "data")["media"],
+            path: "data.media"
+        )
+        let artwork = try dictionary(encodedMedia["artwork"], path: "data.media.artwork")
+        try expect(
+            artwork["url"] as? String == hostedArtwork.publicURL?.absoluteString,
+            "cache-versioned artwork URL was not encoded"
+        )
+
+        do {
+            let insecureArtwork = hostedArtwork.hosted(
+                at: URL(string: "http://media.example.com/current.png?v=\(hash)")!
+            )
+            _ = try CompanionPresenceDTOMapper(includesMediaArtwork: true)
+                .makePresenceRequest(
+                snapshot: snapshot.replacingMediaArtwork(insecureArtwork),
+                deviceID: deviceID,
+                sequence: 8,
+                requestID: requestID(8)
+            )
+            throw HarnessFailure.assertion("insecure artwork URL was accepted")
+        } catch CompanionPresenceMappingError.invalidMediaArtworkURL {
+            // Expected.
+        }
+    }
+
     private static func verifiesPublicStateRequiresNullableKeys() throws {
         let validEmptyState = """
         {
@@ -308,6 +393,36 @@ private struct CompanionProtocolV2Harness {
     }
 
     private static func verifiesCapabilitiesFailClosedAndRespectMinimumVersion() throws {
+        let legacyCapabilitiesJSON = """
+        {
+          "minimumClientVersion": "1.7.3",
+          "presenceSchemaVersions": [2],
+          "momentSchemaVersions": [],
+          "features": {
+            "liveDesk": true,
+            "mediaTimeline": true,
+            "moments": false,
+            "readingSessions": false
+          },
+          "limits": {
+            "presencePayloadBytes": 32768,
+            "presenceRequestsPerMinute": 30,
+            "presenceLeaseMinSeconds": 30,
+            "presenceLeaseMaxSeconds": 120,
+            "recommendedHeartbeatSeconds": 30,
+            "maximumClockSkewSeconds": 30
+          }
+        }
+        """
+        let decodedLegacy = try CompanionJSON.makeDecoder().decode(
+            CompanionCapabilitiesV2.self,
+            from: Data(legacyCapabilitiesJSON.utf8)
+        )
+        try expect(
+            decodedLegacy.features.mediaArtwork == nil,
+            "legacy capabilities did not default artwork support to disabled"
+        )
+
         let limits = CompanionCapabilitiesV2.Limits(
             presencePayloadBytes: 32_768,
             presenceRequestsPerMinute: 30,
@@ -337,6 +452,33 @@ private struct CompanionProtocolV2Harness {
         }
         try expect(configuration.maximumPayloadBytes == 32_768, "payload limit was lost")
         try expect(configuration.supportsMediaTimeline, "media timeline flag was lost")
+        try expect(!configuration.supportsMediaArtwork, "legacy artwork support was enabled")
+
+        let artworkCapabilities = CompanionCapabilitiesV2(
+            minimumClientVersion: "1.7.3",
+            presenceSchemaVersions: [2],
+            momentSchemaVersions: [],
+            features: CompanionCapabilitiesV2.Features(
+                liveDesk: true,
+                mediaTimeline: true,
+                moments: false,
+                readingSessions: false,
+                mediaArtwork: true
+            ),
+            limits: limits
+        )
+        guard case .available(let artworkConfiguration) =
+            CompanionCapabilityNegotiator.negotiatePresence(
+                artworkCapabilities,
+                clientVersion: "1.8.0"
+            )
+        else {
+            throw HarnessFailure.assertion("artwork capabilities were rejected")
+        }
+        try expect(
+            artworkConfiguration.supportsMediaArtwork,
+            "artwork capability was not negotiated"
+        )
 
         let updateRequired = CompanionCapabilityNegotiator.negotiatePresence(
             available,

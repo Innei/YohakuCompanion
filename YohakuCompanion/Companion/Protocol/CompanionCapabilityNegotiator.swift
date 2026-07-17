@@ -8,6 +8,7 @@ struct CompanionNegotiatedPresenceConfiguration: Equatable, Sendable {
     let recommendedHeartbeatSeconds: Int
     let maximumClockSkewSeconds: Int
     let supportsMediaTimeline: Bool
+    let supportsMediaArtwork: Bool
 }
 
 enum CompanionPresenceNegotiationResult: Equatable, Sendable {
@@ -70,7 +71,8 @@ enum CompanionCapabilityNegotiator {
             maximumLeaseSeconds: limits.presenceLeaseMaxSeconds,
             recommendedHeartbeatSeconds: limits.recommendedHeartbeatSeconds,
             maximumClockSkewSeconds: limits.maximumClockSkewSeconds,
-            supportsMediaTimeline: capabilities.features.mediaTimeline
+            supportsMediaTimeline: capabilities.features.mediaTimeline,
+            supportsMediaArtwork: capabilities.features.mediaArtwork == true
         )
     }
 }

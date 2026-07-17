@@ -6,21 +6,25 @@ enum CompanionPresenceMappingError: Error, Equatable, Sendable {
     case textTooLong(field: String, maximumUnicodeScalars: Int)
     case invalidActivityKey
     case invalidIconURL
+    case invalidMediaArtworkURL
     case invalidNumber(field: String)
     case invalidPlaybackRate
 }
 
 struct CompanionPresenceDTOMapper: Sendable {
     private let allowedAssetHosts: Set<String>
+    private let includesMediaArtwork: Bool
     private let minimumLeaseSeconds: Int
     private let maximumLeaseSeconds: Int
 
     init(
         allowedAssetHosts: Set<String> = [],
+        includesMediaArtwork: Bool = false,
         minimumLeaseSeconds: Int = 30,
         maximumLeaseSeconds: Int = 120
     ) {
         self.allowedAssetHosts = Set(allowedAssetHosts.map { $0.lowercased() })
+        self.includesMediaArtwork = includesMediaArtwork
         self.minimumLeaseSeconds = minimumLeaseSeconds
         self.maximumLeaseSeconds = max(minimumLeaseSeconds, maximumLeaseSeconds)
     }
@@ -162,6 +166,12 @@ struct CompanionPresenceDTOMapper: Sendable {
         }
 
         let playback = try makePlayback(media.playback)
+        let artwork: CompanionMediaArtworkV2?
+        if includesMediaArtwork, let publicURL = media.artwork?.publicURL {
+            artwork = try makeMediaArtwork(publicURL)
+        } else {
+            artwork = nil
+        }
         return CompanionMediaContextV2(
             sessionID: media.sessionID.uuidString,
             kind: media.kind,
@@ -169,8 +179,29 @@ struct CompanionPresenceDTOMapper: Sendable {
             artist: media.artist,
             album: media.album,
             player: media.playerDisplayName.map(CompanionPlayerV2.init(displayName:)),
-            playback: playback
+            playback: playback,
+            artwork: artwork,
+            encodesArtwork: includesMediaArtwork
         )
+    }
+
+    private func makeMediaArtwork(_ url: URL) throws -> CompanionMediaArtworkV2 {
+        guard
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+            components.scheme?.lowercased() == "https",
+            components.user == nil,
+            components.password == nil,
+            components.fragment == nil,
+            components.host?.isEmpty == false,
+            components.queryItems?.count == 1,
+            components.queryItems?.first?.name == "v",
+            let hash = components.queryItems?.first?.value,
+            hash.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil,
+            url.absoluteString.utf8.count <= 2_048
+        else {
+            throw CompanionPresenceMappingError.invalidMediaArtworkURL
+        }
+        return CompanionMediaArtworkV2(url: url.absoluteString)
     }
 
     private func makePlayback(

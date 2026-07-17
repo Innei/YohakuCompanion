@@ -56,62 +56,66 @@ struct YohakuPresencePreviewView: View {
 
             Divider()
 
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: 0) {
-                    previewMetric(
-                        title: "Media",
-                        value: mediaSummary,
-                        symbol: mediaSymbol
-                    )
+            HStack(alignment: .top, spacing: 14) {
+                YohakuMediaArtworkPreview(artwork: preview?.media?.artwork)
 
-                    Divider()
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 2)
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 0) {
+                        previewMetric(
+                            title: "Media",
+                            value: mediaSummary,
+                            symbol: mediaSymbol
+                        )
 
-                    previewMetric(
-                        title: "Track",
-                        value: trackSummary,
-                        symbol: preview?.media == nil ? "waveform.slash" : "music.note"
-                    )
+                        Divider()
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 2)
 
-                    Divider()
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 2)
+                        previewMetric(
+                            title: "Track",
+                            value: trackSummary,
+                            symbol: preview?.media == nil ? "waveform.slash" : "music.note"
+                        )
 
-                    previewMetric(
-                        title: "Artist",
-                        value: preview?.media?.artist ?? "Not shared",
-                        symbol: preview?.media?.artist == nil ? "person.slash" : "person.fill"
-                    )
+                        Divider()
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 2)
 
-                    Divider()
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 2)
+                        previewMetric(
+                            title: "Artist",
+                            value: preview?.media?.artist ?? "Not shared",
+                            symbol: preview?.media?.artist == nil ? "person.slash" : "person.fill"
+                        )
 
-                    previewMetric(
-                        title: "Player",
-                        value: preview?.media?.playerDisplayName ?? "Not shared",
-                        symbol: preview?.media?.playerDisplayName == nil ? "play.slash" : "play.square.fill"
-                    )
-                }
+                        Divider()
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 2)
 
-                VStack(alignment: .leading, spacing: 12) {
-                    previewMetric(title: "Media", value: mediaSummary, symbol: mediaSymbol)
-                    previewMetric(
-                        title: "Track",
-                        value: trackSummary,
-                        symbol: preview?.media == nil ? "waveform.slash" : "music.note"
-                    )
-                    previewMetric(
-                        title: "Artist",
-                        value: preview?.media?.artist ?? "Not shared",
-                        symbol: preview?.media?.artist == nil ? "person.slash" : "person.fill"
-                    )
-                    previewMetric(
-                        title: "Player",
-                        value: preview?.media?.playerDisplayName ?? "Not shared",
-                        symbol: preview?.media?.playerDisplayName == nil ? "play.slash" : "play.square.fill"
-                    )
+                        previewMetric(
+                            title: "Player",
+                            value: preview?.media?.playerDisplayName ?? "Not shared",
+                            symbol: preview?.media?.playerDisplayName == nil ? "play.slash" : "play.square.fill"
+                        )
+                    }
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        previewMetric(title: "Media", value: mediaSummary, symbol: mediaSymbol)
+                        previewMetric(
+                            title: "Track",
+                            value: trackSummary,
+                            symbol: preview?.media == nil ? "waveform.slash" : "music.note"
+                        )
+                        previewMetric(
+                            title: "Artist",
+                            value: preview?.media?.artist ?? "Not shared",
+                            symbol: preview?.media?.artist == nil ? "person.slash" : "person.fill"
+                        )
+                        previewMetric(
+                            title: "Player",
+                            value: preview?.media?.playerDisplayName ?? "Not shared",
+                            symbol: preview?.media?.playerDisplayName == nil ? "play.slash" : "play.square.fill"
+                        )
+                    }
                 }
             }
             .padding(16)
@@ -119,7 +123,7 @@ struct YohakuPresencePreviewView: View {
             Divider()
 
             Label(
-                "Only these sanitized values and the current playback timeline can appear on Live Desk. Raw app identifiers and artwork stay on this Mac.",
+                "Only these sanitized values, the current playback timeline, and the normalized cover preview can appear on Live Desk. Raw app identifiers and original artwork stay on this Mac.",
                 systemImage: "lock.shield"
             )
             .font(.caption)

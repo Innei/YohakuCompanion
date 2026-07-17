@@ -62,6 +62,38 @@ struct SanitizedMediaPlayback: Equatable, Sendable {
     let rate: Double
 }
 
+struct SanitizedMediaArtwork: Equatable, Sendable {
+    let pngData: Data
+    let contentHash: String
+    let pixelWidth: Int
+    let pixelHeight: Int
+    let publicURL: URL?
+
+    init(
+        pngData: Data,
+        contentHash: String,
+        pixelWidth: Int,
+        pixelHeight: Int,
+        publicURL: URL? = nil
+    ) {
+        self.pngData = pngData
+        self.contentHash = contentHash
+        self.pixelWidth = pixelWidth
+        self.pixelHeight = pixelHeight
+        self.publicURL = publicURL
+    }
+
+    func hosted(at publicURL: URL?) -> Self {
+        Self(
+            pngData: pngData,
+            contentHash: contentHash,
+            pixelWidth: pixelWidth,
+            pixelHeight: pixelHeight,
+            publicURL: publicURL
+        )
+    }
+}
+
 struct SanitizedMediaPresence: Equatable, Sendable {
     let sessionID: UUID
     let kind: CompanionMediaKind
@@ -70,6 +102,7 @@ struct SanitizedMediaPresence: Equatable, Sendable {
     let album: String?
     let playerDisplayName: String?
     let playback: SanitizedMediaPlayback
+    let artwork: SanitizedMediaArtwork?
 
     init(
         sessionID: UUID,
@@ -78,7 +111,8 @@ struct SanitizedMediaPresence: Equatable, Sendable {
         artist: String?,
         album: String?,
         playerDisplayName: String?,
-        playback: SanitizedMediaPlayback
+        playback: SanitizedMediaPlayback,
+        artwork: SanitizedMediaArtwork? = nil
     ) throws {
         let normalizedTitle = PresenceTextNormalizer.optional(title)
         let normalizedArtist = PresenceTextNormalizer.optional(artist)
@@ -93,6 +127,40 @@ struct SanitizedMediaPresence: Equatable, Sendable {
         self.album = PresenceTextNormalizer.optional(album)
         self.playerDisplayName = PresenceTextNormalizer.optional(playerDisplayName)
         self.playback = playback
+        self.artwork = artwork
+    }
+
+    func replacingArtwork(_ artwork: SanitizedMediaArtwork?) -> Self {
+        Self(
+            normalizedSessionID: sessionID,
+            kind: kind,
+            normalizedTitle: title,
+            normalizedArtist: artist,
+            normalizedAlbum: album,
+            normalizedPlayerDisplayName: playerDisplayName,
+            playback: playback,
+            artwork: artwork
+        )
+    }
+
+    private init(
+        normalizedSessionID: UUID,
+        kind: CompanionMediaKind,
+        normalizedTitle: String?,
+        normalizedArtist: String?,
+        normalizedAlbum: String?,
+        normalizedPlayerDisplayName: String?,
+        playback: SanitizedMediaPlayback,
+        artwork: SanitizedMediaArtwork?
+    ) {
+        sessionID = normalizedSessionID
+        self.kind = kind
+        title = normalizedTitle
+        artist = normalizedArtist
+        album = normalizedAlbum
+        playerDisplayName = normalizedPlayerDisplayName
+        self.playback = playback
+        self.artwork = artwork
     }
 }
 
@@ -103,6 +171,14 @@ struct SanitizedPresenceSnapshot: Equatable, Sendable {
 
     var availability: LiveDeskAvailability {
         application == nil && media == nil ? .idle : .active
+    }
+
+    func replacingMediaArtwork(_ artwork: SanitizedMediaArtwork?) -> Self {
+        Self(
+            observedAt: observedAt,
+            application: application,
+            media: media?.replacingArtwork(artwork)
+        )
     }
 }
 

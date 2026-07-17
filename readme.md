@@ -42,10 +42,10 @@ Live Desk is a short-lived current-state projection, not an activity timeline. E
 | --- | --- | --- |
 | Application | Sanitized display name and optional activity label | Controlled by the Applications source and per-application Share, Hide, or Alias rules |
 | Window title | Current sanitized title | Off by default; read only while Window Titles is enabled and Accessibility permission is granted |
-| Media | Title, artist, album, media kind, and sanitized player name | Controlled independently by the Media Playback source and media privacy rules |
+| Media | Title, artist, album, media kind, sanitized player name, and optional normalized cover URL | Controlled independently by the Media Playback source and media privacy rules; cover delivery also requires the negotiated `mediaArtwork` capability |
 | Playback | Playing or paused state, duration, sampled position, rate, and stable session ID | Published only when Core advertises the negotiated `mediaTimeline` capability |
 
-Raw bundle identifiers, executable paths, process IDs, credentials, artwork, screenshots, and keystrokes are never part of the Live Desk payload.
+Raw bundle identifiers, executable paths, process IDs, credentials, original artwork bytes, screenshots, and keystrokes are never part of the Live Desk payload. When negotiated, Companion downsizes the reviewed cover to a maximum 512-pixel PNG, overwrites one `current.png` object in a hashed per-device namespace, and publishes only its HTTPS URL with a content-hash `v` query parameter.
 
 ## Privacy model
 

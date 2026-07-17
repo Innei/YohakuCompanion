@@ -9,7 +9,7 @@ import CommonCrypto
 import CryptoKit
 import Foundation
 
-struct S3UploaderOptions {
+struct S3UploaderOptions: Sendable {
     let bucket: String
     let region: String
     let accessKey: String
@@ -60,7 +60,7 @@ enum S3UploaderError: LocalizedError {
     }
 }
 
-final class S3Uploader {
+final class S3Uploader: @unchecked Sendable {
     private let options: S3UploaderOptions
 
     init(options: S3UploaderOptions) {
@@ -158,7 +158,7 @@ final class S3Uploader {
         return try Self.appending(segments: objectSegments, to: url)
     }
 
-    private func publicURL(for objectKey: String) throws -> URL {
+    func publicURL(for objectKey: String) throws -> URL {
         if let domain = options.customDomain?.trimmingCharacters(in: .whitespacesAndNewlines),
             !domain.isEmpty
         {
@@ -210,7 +210,8 @@ final class S3Uploader {
     func uploadToS3(
         objectKey: String,
         fileData: Data,
-        contentType: String
+        contentType: String,
+        cacheControl: String? = nil
     ) async throws {
         guard !options.region.isEmpty else {
             throw S3UploaderError.missingConfiguration("region")
@@ -241,13 +242,16 @@ final class S3Uploader {
             hostHeader = host
         }
 
-        let headers = [
+        var headers: [String: String] = [
             "Host": hostHeader,
             "Content-Type": contentType,
             "Content-Length": String(fileData.count),
             "x-amz-date": xAmzDate,
             "x-amz-content-sha256": hashedPayload,
         ]
+        if let cacheControl {
+            headers["Cache-Control"] = cacheControl
+        }
 
         let sortedHeaders = headers.keys.sorted { $0.lowercased() < $1.lowercased() }
         let canonicalHeaders = sortedHeaders.map { key in

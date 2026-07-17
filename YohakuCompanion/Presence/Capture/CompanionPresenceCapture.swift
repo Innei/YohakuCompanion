@@ -26,6 +26,7 @@ struct CompanionPresencePolicyFingerprint: Equatable, Sendable {
 @MainActor
 final class CompanionPresenceCapture {
     private let mediaSessionTracker: CompanionMediaSessionTracker
+    private let mediaArtworkNormalizer: CompanionMediaArtworkNormalizer
     private let pausedRetentionInterval: TimeInterval
 
     private var currentMediaIdentity: CompanionMediaSemanticIdentity?
@@ -33,9 +34,11 @@ final class CompanionPresenceCapture {
 
     init(
         mediaSessionTracker: CompanionMediaSessionTracker? = nil,
+        mediaArtworkNormalizer: CompanionMediaArtworkNormalizer = CompanionMediaArtworkNormalizer(),
         pausedRetentionInterval: TimeInterval = 5 * 60
     ) {
         self.mediaSessionTracker = mediaSessionTracker ?? CompanionMediaSessionTracker()
+        self.mediaArtworkNormalizer = mediaArtworkNormalizer
         self.pausedRetentionInterval = pausedRetentionInterval
     }
 
@@ -160,11 +163,32 @@ final class CompanionPresenceCapture {
         // Preferences are deliberately loaded after the provider await. A
         // privacy rule tightened during capture therefore applies before any
         // raw value can enter the sanitized domain model.
-        let evaluator = privacyEvaluator()
-        let decision = evaluator.mediaDecision(
+        let initialDecision = privacyEvaluator().mediaDecision(
             applicationIdentifier: mediaInfo.applicationIdentifier,
             processName: mediaInfo.processName
         )
+        guard initialDecision.sharesMedia else {
+            resetMediaContinuity()
+            return nil
+        }
+        let artwork = await mediaArtworkNormalizer.normalize(mediaInfo.image)
+        try Task.checkCancellation()
+
+        // Artwork normalization runs outside the main actor. Re-read every
+        // source and privacy input after that suspension so a rule tightened
+        // in the interim remains fail-closed for the entire media snapshot.
+        guard PreferencesDataModel.enabledTypes.value.types.contains(.media) else {
+            resetMediaContinuity()
+            return nil
+        }
+        let decision = privacyEvaluator().mediaDecision(
+            applicationIdentifier: mediaInfo.applicationIdentifier,
+            processName: mediaInfo.processName
+        )
+        guard decision.sharesMedia else {
+            resetMediaContinuity()
+            return nil
+        }
         let mappings = PreferencesDataModel.mappingList.value.getList()
         let mappedPlayerName = mappings.first {
             $0.type == .mediaProcessName && $0.from == mediaInfo.processName
@@ -214,7 +238,8 @@ final class CompanionPresenceCapture {
                 sampledAt: sampledAt,
                 isPlaying: mediaInfo.playing,
                 sharesMedia: decision.sharesMedia,
-                requiresArtist: PreferencesDataModel.ignoreNullArtist.value
+                requiresArtist: PreferencesDataModel.ignoreNullArtist.value,
+                artwork: artwork
             )
             if sanitized == nil {
                 resetMediaContinuity()

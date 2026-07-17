@@ -45,7 +45,8 @@ private func media(
     durationSeconds: Double? = 180,
     positionSeconds: Double? = 30,
     sampledAt: Date = Date(timeIntervalSince1970: 20),
-    rate: Double = 1
+    rate: Double = 1,
+    artwork: SanitizedMediaArtwork? = nil
 ) throws -> SanitizedMediaPresence {
     try SanitizedMediaPresence(
         sessionID: sessionID,
@@ -60,7 +61,8 @@ private func media(
             positionSeconds: positionSeconds,
             sampledAt: sampledAt,
             rate: rate
-        )
+        ),
+        artwork: artwork
     )
 }
 
@@ -134,6 +136,56 @@ private enum CompanionPreviewConsentGateHarness {
                 currentSnapshot: advancedPlaybackSnapshot
             ),
             "natural media position and sampling-time changes invalidated consent"
+        )
+
+        let firstArtwork = SanitizedMediaArtwork(
+            pngData: Data([1]),
+            contentHash: String(repeating: "a", count: 64),
+            pixelWidth: 1,
+            pixelHeight: 1
+        )
+        var artworkGate = CompanionPreviewConsentGate()
+        let artworkSnapshot = try snapshot(
+            applicationName: nil,
+            media: media(title: "First Track", artwork: firstArtwork)
+        )
+        let artworkPreview = artworkGate.recordPreview(artworkSnapshot)
+        let hostedArtworkSnapshot = try snapshot(
+            applicationName: nil,
+            media: media(
+                title: "First Track",
+                artwork: firstArtwork.hosted(
+                    at: URL(
+                        string: "https://media.example.com/current.png?v=\(firstArtwork.contentHash)"
+                    )
+                )
+            )
+        )
+        try expect(
+            artworkGate.validates(
+                artworkPreview,
+                currentSnapshot: hostedArtworkSnapshot
+            ),
+            "hosting metadata incorrectly invalidated reviewed artwork"
+        )
+        let changedArtworkSnapshot = try snapshot(
+            applicationName: nil,
+            media: media(
+                title: "First Track",
+                artwork: SanitizedMediaArtwork(
+                    pngData: Data([2]),
+                    contentHash: String(repeating: "b", count: 64),
+                    pixelWidth: 1,
+                    pixelHeight: 1
+                )
+            )
+        )
+        try expect(
+            !artworkGate.validates(
+                artworkPreview,
+                currentSnapshot: changedArtworkSnapshot
+            ),
+            "changed public artwork remained confirmable"
         )
 
         let semanticChanges: [(name: String, media: SanitizedMediaPresence)] = [

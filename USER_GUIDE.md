@@ -107,6 +107,8 @@ Optional delivery paths are separate from the Yohaku Connection.
 | Legacy MixSpace | HTTP(S) endpoint and API token | Compatibility path; it is not the Yohaku device pairing |
 | Application Icon Hosting | S3-compatible storage | Optional asset infrastructure, not a destination |
 
+Live Desk album covers reuse the existing Application Icon Hosting S3/R2 custom domain when both the Companion Core and client support `mediaArtwork`; no separate Core environment variable is required. Companion keeps only one object per paired device at `<configured path>/media-artwork/<device id SHA-256>/current.png`; each replacement URL uses `?v=<content SHA-256>` so browsers and CDNs select the new cache entry without accumulating objects in the bucket.
+
 Each detail page keeps an unsaved draft. **Test** uses that draft without saving it, and external-write tests require confirmation. Leaving a modified page offers Save, Discard, and Cancel.
 
 Credentials are stored outside exported settings. Saved credentials are never displayed in plaintext; use **Replace** or **Remove** to change them.

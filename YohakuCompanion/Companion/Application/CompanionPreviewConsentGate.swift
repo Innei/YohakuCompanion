@@ -20,6 +20,7 @@ struct CompanionSanitizedPreviewProjection: Equatable, Sendable {
         let artist: String?
         let album: String?
         let playerDisplayName: String?
+        let artworkContentHash: String?
         let playback: PlaybackSemantics
 
         init(media: SanitizedMediaPresence) {
@@ -28,6 +29,7 @@ struct CompanionSanitizedPreviewProjection: Equatable, Sendable {
             artist = media.artist
             album = media.album
             playerDisplayName = media.playerDisplayName
+            artworkContentHash = media.artwork?.contentHash
             playback = PlaybackSemantics(playback: media.playback)
         }
     }

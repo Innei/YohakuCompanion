@@ -71,7 +71,41 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
       return dateSeconds(info.objectForKey(key))
     }
 
-    function snapshot(info, bundleIdentifier, source, playing, activityDate) {
+    function encodedData(value) {
+      if (isNil(value)) return null
+      try {
+        return unwrap(value.base64EncodedStringWithOptions(0))
+      } catch (_) {
+        return null
+      }
+    }
+
+    function artworkData(artwork) {
+      if (isNil(artwork)) return null
+      try {
+        const imageDataSelector = $.NSSelectorFromString("imageData")
+        const value = artwork.respondsToSelector(imageDataSelector)
+          ? artwork.imageData
+          : artwork
+        return encodedData(value)
+      } catch (_) {
+        return null
+      }
+    }
+
+    function infoData(info, key) {
+      if (isNil(info)) return null
+      return encodedData(info.objectForKey(key))
+    }
+
+    function snapshot(
+      info,
+      bundleIdentifier,
+      source,
+      playing,
+      activityDate,
+      artwork
+    ) {
       const playbackRate = numericValue(
         infoValue(info, "kMRMediaRemoteNowPlayingInfoPlaybackRate")
       )
@@ -79,6 +113,10 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
         activityDate: activityDate,
         album: infoValue(info, "kMRMediaRemoteNowPlayingInfoAlbum"),
         artist: infoValue(info, "kMRMediaRemoteNowPlayingInfoArtist"),
+        artworkData: artworkData(artwork) || infoData(
+          info,
+          "kMRMediaRemoteNowPlayingInfoArtworkData"
+        ),
         bundleIdentifier: bundleIdentifier,
         duration: infoValue(info, "kMRMediaRemoteNowPlayingInfoDuration"),
         elapsedTime: infoValue(info, "kMRMediaRemoteNowPlayingInfoElapsedTime"),
@@ -131,6 +169,9 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
       const lastPlayingDateSelector = $.NSSelectorFromString(
         "requestLastPlayingDateWithCompletion:"
       )
+      const artworkSelector = $.NSSelectorFromString(
+        "requestNowPlayingItemArtworkWithCompletion:"
+      )
 
       const playerPath = MRNowPlayingRequest.localNowPlayingPlayerPath
       const client = isNil(playerPath) ? null : playerPath.client
@@ -148,13 +189,16 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
           bundleIdentifier,
           "global",
           Boolean(MRNowPlayingRequest.localIsPlaying),
-          infoDateSeconds(info, "kMRMediaRemoteNowPlayingInfoTimestamp")
+          infoDateSeconds(info, "kMRMediaRemoteNowPlayingInfoTimestamp"),
+          null
         )
       )
 
       for (const supportedBundleIdentifier of bundleIdentifiers) {
         const state = {
           bundleIdentifier: supportedBundleIdentifier,
+          artwork: null,
+          artworkCompleted: false,
           dateCompleted: false,
           info: null,
           infoCompleted: false,
@@ -172,6 +216,7 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
           const request = MRNowPlayingRequest.alloc.initWithPlayerPath(path)
 
           if (!request.respondsToSelector(infoSelector)) {
+            state.artworkCompleted = true
             state.infoCompleted = true
             state.dateCompleted = true
             continue
@@ -198,6 +243,27 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
           )
           $.objc_msgSend(request, infoSelector, infoBridge.block)
 
+          if (request.respondsToSelector(artworkSelector)) {
+            const artworkCallback = ObjC.block(
+              ["void", ["id", "id"]],
+              function(nowPlayingArtwork, _) {
+                state.artworkCompleted = true
+                state.artwork = isNil(nowPlayingArtwork)
+                  ? null
+                  : nowPlayingArtwork
+              }
+            )
+            const artworkBridge = materializeNativeBlock(artworkCallback)
+            keepAlive.push(
+              artworkCallback,
+              artworkBridge.holder,
+              artworkBridge.block
+            )
+            $.objc_msgSend(request, artworkSelector, artworkBridge.block)
+          } else {
+            state.artworkCompleted = true
+          }
+
           if (request.respondsToSelector(lastPlayingDateSelector)) {
             const dateCallback = ObjC.block(
               ["void", ["id", "id"]],
@@ -217,12 +283,18 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
           // release removes a targeted selector for one adapted player.
           state.infoCompleted = true
           state.dateCompleted = true
+          state.artworkCompleted = true
         }
       }
 
       const deadline = $.NSDate.dateWithTimeIntervalSinceNow(1.25)
       while (
-        states.some(state => !state.infoCompleted || !state.dateCompleted) &&
+        states.some(
+          state =>
+            !state.infoCompleted ||
+            !state.dateCompleted ||
+            !state.artworkCompleted
+        ) &&
         Number(deadline.timeIntervalSinceNow) > 0
       ) {
         $.NSRunLoop.currentRunLoop.runUntilDate(
@@ -242,7 +314,8 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
               state.bundleIdentifier,
               "supported",
               null,
-              state.lastPlayingDate
+              state.lastPlayingDate,
+              state.artwork
             )
           )
         }
@@ -435,7 +508,7 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
       name: title,
       artist: artist,
       album: album,
-      image: nil,
+      image: nonEmptyString(dictionary["artworkData"]),
       duration: numberValue(dictionary["duration"]),
       elapsedTime: numberValue(dictionary["elapsedTime"]),
       processID: runningApplication.map { Int($0.processIdentifier) } ?? 0,

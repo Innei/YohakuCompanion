@@ -18,6 +18,7 @@ enum CompanionLiveDeskRuntimeState: Equatable, Sendable {
 final class CompanionLiveDeskCoordinator {
     private let connectionStore: CompanionConnectionStore
     private let capture: CompanionPresenceCapture
+    private let mediaArtworkHost: CompanionMediaArtworkHost
     private let clientVersion: String
     private let authorityRegistry = CompanionPresenceAuthorityRegistry()
 
@@ -44,6 +45,8 @@ final class CompanionLiveDeskCoordinator {
     private var minimumSendInterval: Duration = .zero
     private var lastSendStartedAt: ContinuousClock.Instant?
     private var supportsMediaTimeline = false
+    private var supportsMediaArtwork = false
+    private var mediaArtworkDeviceID: String?
     private var lifecycle = CompanionCoordinatorLifecycle()
     private var client: (any CompanionPresenceSending)? {
         authorityRegistry.currentClient
@@ -60,11 +63,15 @@ final class CompanionLiveDeskCoordinator {
     init(
         connectionStore: CompanionConnectionStore,
         capture: CompanionPresenceCapture,
-        clientVersion: String
+        clientVersion: String,
+        mediaArtworkHost: CompanionMediaArtworkHost = CompanionMediaArtworkHost(
+            uploader: S3CompanionMediaArtworkUploader()
+        )
     ) {
         self.connectionStore = connectionStore
         self.capture = capture
         self.clientVersion = clientVersion
+        self.mediaArtworkHost = mediaArtworkHost
     }
 
     func start() {
@@ -210,7 +217,10 @@ final class CompanionLiveDeskCoordinator {
                     60.0 / Double(configuration.requestsPerMinute)
                 )
                 supportsMediaTimeline = configuration.supportsMediaTimeline
+                supportsMediaArtwork = configuration.supportsMediaArtwork
+                mediaArtworkDeviceID = connection.metadata.deviceID
                 let mapper = CompanionPresenceDTOMapper(
+                    includesMediaArtwork: configuration.supportsMediaArtwork,
                     minimumLeaseSeconds: configuration.minimumLeaseSeconds,
                     maximumLeaseSeconds: configuration.maximumLeaseSeconds
                 )
@@ -298,9 +308,31 @@ final class CompanionLiveDeskCoordinator {
             }
             do {
                 lastSendStartedAt = ContinuousClock().now
-                let snapshot = try await capture.capture(
+                var snapshot = try await capture.capture(
                     includeMediaTimeline: supportsMediaTimeline
                 )
+                guard generation == currentGeneration, !Task.isCancelled else { return }
+                if supportsMediaArtwork,
+                   let artwork = snapshot.media?.artwork,
+                   let deviceID = mediaArtworkDeviceID,
+                   let hostingConfiguration = CompanionMediaArtworkHostingConfiguration(
+                       integration: PreferencesDataModel.s3Integration.value
+                   )
+                {
+                    do {
+                        let hostedArtwork = try await mediaArtworkHost.host(
+                            artwork,
+                            deviceID: deviceID,
+                            configuration: hostingConfiguration
+                        )
+                        snapshot = snapshot.replacingMediaArtwork(hostedArtwork)
+                    } catch is CancellationError {
+                        return
+                    } catch {
+                        // Artwork is an optional enrichment. A failed upload
+                        // must not suppress the sanitized text Presence.
+                    }
+                }
                 guard generation == currentGeneration, !Task.isCancelled else { return }
                 _ = try await client.replacePresence(
                     with: snapshot,
@@ -470,6 +502,8 @@ final class CompanionLiveDeskCoordinator {
         minimumSendInterval = .zero
         lastSendStartedAt = nil
         supportsMediaTimeline = false
+        supportsMediaArtwork = false
+        mediaArtworkDeviceID = nil
         removeMediaObservation()
         capture.resetMediaContinuity()
         removeActivationObserver()

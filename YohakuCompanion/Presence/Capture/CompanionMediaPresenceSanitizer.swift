@@ -31,7 +31,8 @@ enum CompanionMediaPresenceSanitizer {
         sampledAt: Date,
         isPlaying: Bool,
         sharesMedia: Bool,
-        requiresArtist: Bool
+        requiresArtist: Bool,
+        artwork: SanitizedMediaArtwork? = nil
     ) throws -> SanitizedMediaPresence? {
         guard sharesMedia else { return nil }
 
@@ -59,7 +60,8 @@ enum CompanionMediaPresenceSanitizer {
                 positionSeconds: position,
                 sampledAt: sampledAt,
                 rate: isPlaying ? 1 : 0
-            )
+            ),
+            artwork: artwork
         )
     }
 
