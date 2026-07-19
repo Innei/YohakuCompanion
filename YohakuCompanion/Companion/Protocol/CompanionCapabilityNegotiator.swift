@@ -20,7 +20,41 @@ enum CompanionPresenceNegotiationResult: Equatable, Sendable {
     case invalidCapabilities
 }
 
+enum CompanionMomentNegotiationResult: Equatable, Sendable {
+    case available
+    case clientUpdateRequired(minimumVersion: String)
+    case schemaUnsupported
+    case featureUnavailable
+    case invalidCapabilities
+}
+
 enum CompanionCapabilityNegotiator {
+    static func negotiateMoment(
+        _ capabilities: CompanionCapabilitiesV2,
+        clientVersion: String
+    ) -> CompanionMomentNegotiationResult {
+        guard
+            let clientVersion = CompanionSemanticVersion(clientVersion),
+            let minimumVersion = CompanionSemanticVersion(capabilities.minimumClientVersion),
+            capabilities.presenceSchemaVersions.allSatisfy({ $0 > 0 }),
+            capabilities.momentSchemaVersions.allSatisfy({ $0 > 0 })
+        else {
+            return .invalidCapabilities
+        }
+        guard clientVersion >= minimumVersion else {
+            return .clientUpdateRequired(minimumVersion: capabilities.minimumClientVersion)
+        }
+        guard capabilities.momentSchemaVersions.contains(
+            CompanionProtocolV2.momentSchemaVersion
+        ) else {
+            return .schemaUnsupported
+        }
+        guard capabilities.features.moments else {
+            return .featureUnavailable
+        }
+        return .available
+    }
+
     static func negotiatePresence(
         _ capabilities: CompanionCapabilitiesV2,
         clientVersion: String

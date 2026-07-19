@@ -25,6 +25,7 @@ final class ReporterStatusItemManager: NSObject {
     private var menuActions: PresenceMenuBuilder.Actions!
 
     private var aggregateStatusObservation: AnyCancellable?
+    private var companionObservations = Set<AnyCancellable>()
     private var renderedStatus: PresenceAggregateStatus?
 
     override init() {
@@ -35,6 +36,7 @@ final class ReporterStatusItemManager: NSObject {
             target: actionTarget,
             toggleSharing: #selector(MenuActionTarget.toggleSharing(_:)),
             openPrivacyRule: #selector(MenuActionTarget.openPrivacyRule(_:)),
+            openMomentComposer: #selector(MenuActionTarget.openMomentComposer(_:)),
             openDestinations: #selector(MenuActionTarget.openDestinations(_:)),
             openDestination: #selector(MenuActionTarget.openDestination(_:)),
             openIconHosting: #selector(MenuActionTarget.openIconHosting(_:)),
@@ -46,6 +48,7 @@ final class ReporterStatusItemManager: NSObject {
         configureStatusItem()
         configureMenu()
         observeAggregateStatus()
+        observeCompanionPublishing()
         applyStatusItemAppearance(model.aggregateStatus)
     }
 
@@ -122,6 +125,10 @@ final class ReporterStatusItemManager: NSObject {
         PresenceMenuBuilder.rebuild(
             menu,
             model: model,
+            momentState: PresenceMenuBuilder.MomentState(
+                availability: YohakuCompanionService.shared.momentPublishingAvailability,
+                pendingCount: YohakuCompanionService.shared.pendingMomentCount
+            ),
             actions: menuActions
         )
     }
@@ -134,6 +141,16 @@ final class ReporterStatusItemManager: NSObject {
                     self?.applyStatusItemAppearance(status)
                 }
             }
+    }
+
+    private func observeCompanionPublishing() {
+        let service = YohakuCompanionService.shared
+        service.$connection
+            .map { _ in () }
+            .merge(with: service.$pendingMomentCount.map { _ in () })
+            .receive(on: RunLoop.main)
+            .sink { [weak self] in self?.rebuildMenu() }
+            .store(in: &companionObservations)
     }
 
     private func applyStatusItemAppearance(_ status: PresenceAggregateStatus) {
@@ -161,6 +178,15 @@ final class ReporterStatusItemManager: NSObject {
         openSettings(
             route: .privacyRules(applicationIdentifier: applicationIdentifier)
         )
+    }
+
+    @objc private func openMomentComposer(_ sender: NSMenuItem) {
+        switch YohakuCompanionService.shared.momentPublishingAvailability {
+        case .available:
+            MomentComposerWindowManager.shared.showWindow()
+        case .setupRequired, .repairPairingRequired:
+            openSettings(route: .section(.yohaku))
+        }
     }
 
     @objc private func openDestinations(_ sender: NSMenuItem) {
@@ -209,6 +235,10 @@ final class ReporterStatusItemManager: NSObject {
 
         @objc func openPrivacyRule(_ sender: NSMenuItem) {
             owner.openPrivacyRule(sender)
+        }
+
+        @objc func openMomentComposer(_ sender: NSMenuItem) {
+            owner.openMomentComposer(sender)
         }
 
         @objc func openDestinations(_ sender: NSMenuItem) {

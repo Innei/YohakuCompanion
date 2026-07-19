@@ -226,9 +226,18 @@ actor CompanionConnectionStore {
     /// Resolves the protected token only after both the local opt-in and the
     /// non-secret connection metadata have passed validation.
     func loadEnabledConnection() async throws -> CompanionPairedConnection? {
-        guard let metadata = try loadMetadata(), metadata.isLiveDeskEnabled else {
+        guard let connection = try await loadPairedConnection(),
+              connection.metadata.isLiveDeskEnabled
+        else {
             return nil
         }
+        return connection
+    }
+
+    /// Resolves the paired credential without requiring Live Desk consent.
+    /// One-shot Moment publishing has its own explicit confirmation boundary.
+    func loadPairedConnection() async throws -> CompanionPairedConnection? {
+        guard let metadata = try loadMetadata() else { return nil }
         guard let token = try await credentialPersistence.resolveDeviceToken(),
               !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else {
@@ -238,8 +247,7 @@ actor CompanionConnectionStore {
         // consent record so a concurrent disable cannot publish with a token
         // that was resolved under the older enabled state.
         guard let currentMetadata = try loadMetadata(),
-              currentMetadata == metadata,
-              currentMetadata.isLiveDeskEnabled
+              currentMetadata == metadata
         else {
             return nil
         }

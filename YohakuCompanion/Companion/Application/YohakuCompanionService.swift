@@ -7,6 +7,21 @@ enum YohakuCompanionServiceError: Error, Equatable, Sendable {
     case applicationTerminating
     case missingConnection
     case previewOutOfDate
+    case momentScopeMissing
+    case momentFeatureUnavailable
+    case momentSchemaUnsupported
+    case clientUpdateRequired(minimumVersion: String)
+}
+
+enum CompanionMomentPublishResult: Equatable, Sendable {
+    case published(id: String, url: URL?)
+    case queued
+}
+
+enum CompanionMomentPublishingAvailability: Equatable, Sendable {
+    case available
+    case setupRequired
+    case repairPairingRequired
 }
 
 /// Non-secret connection data intended for settings presentation. The Device
@@ -38,15 +53,20 @@ final class YohakuCompanionService: ObservableObject {
     @Published private(set) var runtimeState: CompanionLiveDeskRuntimeState = .disabled
     @Published private(set) var isBusy = false
     @Published private(set) var isPreviewCurrent = false
+    @Published private(set) var pendingMomentCount = 0
+    @Published private(set) var isPublishingMoment = false
 
     private let connectionStore: CompanionConnectionStore
     private let coordinator: CompanionLiveDeskCoordinator
     private let capture: CompanionPresenceCapture
+    private let momentOutbox: CompanionMomentOutbox
+    private let momentArtworkHost: CompanionMomentArtworkHost
     private let capturePolicySubscriptions = DisposeBag()
     private var capturePolicyFingerprint: CompanionPresencePolicyFingerprint
     private var previewConsentGate = CompanionPreviewConsentGate()
     private var displayedPreviewConfirmation: CompanionPreviewConsentGate.Confirmation?
     private var previewCaptureGeneration: UInt64 = 0
+    private var momentRetryTask: Task<Void, Never>?
 
     private convenience init() {
         self.init(
@@ -60,10 +80,14 @@ final class YohakuCompanionService: ObservableObject {
 
     init(
         connectionStore: CompanionConnectionStore,
-        capture: CompanionPresenceCapture
+        capture: CompanionPresenceCapture,
+        momentOutbox: CompanionMomentOutbox = CompanionMomentOutbox(),
+        momentArtworkHost: CompanionMomentArtworkHost = CompanionMomentArtworkHost()
     ) {
         self.connectionStore = connectionStore
         self.capture = capture
+        self.momentOutbox = momentOutbox
+        self.momentArtworkHost = momentArtworkHost
         capturePolicyFingerprint = capture.policyFingerprint()
         coordinator = CompanionLiveDeskCoordinator(
             connectionStore: connectionStore,
@@ -82,6 +106,13 @@ final class YohakuCompanionService: ObservableObject {
         coordinator
     }
 
+    var momentPublishingAvailability: CompanionMomentPublishingAvailability {
+        guard let connection else { return .setupRequired }
+        return connection.scopes.contains(.momentWrite)
+            ? .available
+            : .repairPairingRequired
+    }
+
     func start() async {
         do {
             try await load()
@@ -98,6 +129,8 @@ final class YohakuCompanionService: ObservableObject {
             clearPreviewConsent()
         }
         coordinator.start()
+        await refreshPendingMomentCount()
+        await retryPendingMoments()
     }
 
     func load() async throws {
@@ -121,6 +154,125 @@ final class YohakuCompanionService: ObservableObject {
         if policyChanged {
             coordinator.requestFreshSnapshot()
         }
+    }
+
+    func captureMomentSnapshot() async throws -> SanitizedPresenceSnapshot {
+        guard momentPublishingAvailability == .available else {
+            throw momentAvailabilityError()
+        }
+        return try await capture.capture(includeMediaTimeline: true)
+    }
+
+    func publishMoment(_ draft: CompanionMomentDraft) async throws
+        -> CompanionMomentPublishResult
+    {
+        guard !ApplicationState.isTerminating else {
+            throw YohakuCompanionServiceError.applicationTerminating
+        }
+        guard !isPublishingMoment else {
+            throw YohakuCompanionServiceError.operationInProgress
+        }
+        guard momentPublishingAvailability == .available else {
+            throw momentAvailabilityError()
+        }
+
+        isPublishingMoment = true
+        defer { isPublishingMoment = false }
+
+        let mapper = CompanionMomentDTOMapper()
+        var request = try mapper.makeRequest(draft: draft)
+        do {
+            guard let connection = try await connectionStore.loadPairedConnection() else {
+                throw YohakuCompanionServiceError.missingConnection
+            }
+            let client = CompanionHTTPClient(
+                server: connection.server,
+                maximumPayloadBytes: 64 * 1_024,
+                clientVersion: CompanionClientVersion.current
+            )
+            let capabilities = try await client.fetchCapabilities()
+            try requireMomentCapability(capabilities.data)
+
+            if draft.includesMedia,
+               let artwork = draft.snapshot.media?.artwork,
+               let configuration = CompanionMediaArtworkHostingConfiguration(
+                   integration: PreferencesDataModel.s3Integration.value
+               )
+            {
+                do {
+                    let artworkURL = try await momentArtworkHost.host(
+                        artwork,
+                        configuration: configuration
+                    )
+                    request = try mapper.makeRequest(
+                        draft: draft,
+                        artworkURL: artworkURL,
+                        requestID: request.meta.requestID
+                    )
+                } catch is CancellationError {
+                    throw CancellationError()
+                } catch {
+                    // Artwork is optional. The sanitized text and context remain publishable.
+                }
+            }
+
+            let response = try await client.publishRecently(
+                request,
+                credential: connection.credential
+            )
+            return .published(id: response.data.id, url: response.data.url)
+        } catch {
+            guard shouldQueueMoment(after: error) else { throw error }
+            try await momentOutbox.enqueue(request)
+            await refreshPendingMomentCount()
+            scheduleMomentRetries()
+            return .queued
+        }
+    }
+
+    func retryPendingMoments() async {
+        guard momentPublishingAvailability == .available,
+              !ApplicationState.isTerminating,
+              let connection = try? await connectionStore.loadPairedConnection()
+        else {
+            await refreshPendingMomentCount()
+            return
+        }
+        guard let entries = try? await momentOutbox.entries(), !entries.isEmpty else {
+            await refreshPendingMomentCount()
+            return
+        }
+
+        let client = CompanionHTTPClient(
+            server: connection.server,
+            maximumPayloadBytes: 64 * 1_024,
+            clientVersion: CompanionClientVersion.current
+        )
+        do {
+            let capabilities = try await client.fetchCapabilities()
+            try requireMomentCapability(capabilities.data)
+            for entry in entries where !Task.isCancelled {
+                do {
+                    _ = try await client.publishRecently(
+                        entry.request,
+                        credential: connection.credential
+                    )
+                    try await momentOutbox.remove(requestID: entry.request.meta.requestID)
+                } catch {
+                    if shouldQueueMoment(after: error) { break }
+                    return
+                }
+            }
+        } catch {
+            // The durable outbox remains unchanged for a later retry.
+        }
+        await refreshPendingMomentCount()
+        if pendingMomentCount > 0 { scheduleMomentRetries() }
+    }
+
+    func shutdownMomentPublishing() {
+        momentRetryTask?.cancel()
+        momentRetryTask = nil
     }
 
     func pair(
@@ -153,6 +305,8 @@ final class YohakuCompanionService: ObservableObject {
             deviceName: deviceName,
             connectionStore: connectionStore
         )
+        try? await momentOutbox.removeAll()
+        await refreshPendingMomentCount()
 
         // A successful claim atomically replaces the local credential and
         // installs disabled metadata. Stop the previous authority immediately;
@@ -302,6 +456,8 @@ final class YohakuCompanionService: ObservableObject {
 
         do {
             let result = try await connectionStore.removeConnection()
+            try? await momentOutbox.removeAll()
+            await refreshPendingMomentCount()
             connection = nil
             runtimeState = coordinator.state
             clearPreviewConsent()
@@ -320,6 +476,68 @@ final class YohakuCompanionService: ObservableObject {
             throw YohakuCompanionServiceError.operationInProgress
         }
         isBusy = true
+    }
+
+    private func momentAvailabilityError() -> YohakuCompanionServiceError {
+        switch momentPublishingAvailability {
+        case .available:
+            return .operationInProgress
+        case .setupRequired:
+            return .missingConnection
+        case .repairPairingRequired:
+            return .momentScopeMissing
+        }
+    }
+
+    private func requireMomentCapability(
+        _ capabilities: CompanionCapabilitiesV2
+    ) throws {
+        switch CompanionCapabilityNegotiator.negotiateMoment(
+            capabilities,
+            clientVersion: CompanionClientVersion.current
+        ) {
+        case .available:
+            return
+        case .clientUpdateRequired(let minimumVersion):
+            throw YohakuCompanionServiceError.clientUpdateRequired(
+                minimumVersion: minimumVersion
+            )
+        case .schemaUnsupported:
+            throw YohakuCompanionServiceError.momentSchemaUnsupported
+        case .featureUnavailable, .invalidCapabilities:
+            throw YohakuCompanionServiceError.momentFeatureUnavailable
+        }
+    }
+
+    private func shouldQueueMoment(after error: Error) -> Bool {
+        if error is URLError { return true }
+        guard let error = error as? CompanionHTTPClientError else { return false }
+        switch error {
+        case .server(let statusCode, _):
+            return statusCode >= 500 || statusCode == 429
+        case .invalidResponse, .unexpectedEmptyResponse, .responseDecodingFailed:
+            return true
+        case .credentialDeviceMismatch,
+             .responseRequestIDMismatch,
+             .payloadTooLarge:
+            return false
+        }
+    }
+
+    private func refreshPendingMomentCount() async {
+        pendingMomentCount = (try? await momentOutbox.count()) ?? 0
+    }
+
+    private func scheduleMomentRetries() {
+        guard momentRetryTask == nil, pendingMomentCount > 0 else { return }
+        momentRetryTask = Task { @MainActor [weak self] in
+            while let self, !Task.isCancelled, self.pendingMomentCount > 0 {
+                try? await Task.sleep(for: .seconds(60))
+                guard !Task.isCancelled else { return }
+                await self.retryPendingMoments()
+            }
+            self?.momentRetryTask = nil
+        }
     }
 
     /// Installs the only process-wide capture-input observer. Injected service

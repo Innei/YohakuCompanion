@@ -2,10 +2,16 @@ import AppKit
 
 @MainActor
 struct PresenceMenuBuilder {
+    struct MomentState {
+        let availability: CompanionMomentPublishingAvailability
+        let pendingCount: Int
+    }
+
     struct Actions {
         let target: NSObject
         let toggleSharing: Selector
         let openPrivacyRule: Selector
+        let openMomentComposer: Selector
         let openDestinations: Selector
         let openDestination: Selector
         let openIconHosting: Selector
@@ -17,6 +23,7 @@ struct PresenceMenuBuilder {
     static func rebuild(
         _ menu: NSMenu,
         model: PresenceMenuBarModel,
+        momentState: MomentState,
         actions: Actions
     ) {
         menu.removeAllItems()
@@ -24,10 +31,44 @@ struct PresenceMenuBuilder {
         addSharingItems(to: menu, model: model, actions: actions)
         menu.addItem(.separator())
         addCurrentPresenceItems(to: menu, model: model, actions: actions)
+        addMomentItems(to: menu, state: momentState, actions: actions)
         menu.addItem(.separator())
         addDestinationItems(to: menu, model: model, actions: actions)
         menu.addItem(.separator())
         addApplicationItems(to: menu, actions: actions)
+    }
+
+    private static func addMomentItems(
+        to menu: NSMenu,
+        state: MomentState,
+        actions: Actions
+    ) {
+        let title: String
+        switch state.availability {
+        case .available:
+            title = "Publish This Moment…"
+        case .setupRequired, .repairPairingRequired:
+            title = "Set Up Yohaku to Publish…"
+        }
+        let item = actionItem(
+            title: title,
+            action: actions.openMomentComposer,
+            target: actions.target,
+            systemImage: "square.and.arrow.up"
+        )
+        if state.availability == .repairPairingRequired {
+            item.toolTip = "Pair Yohaku again to grant Moment publishing access."
+        }
+        menu.addItem(item)
+
+        if state.pendingCount > 0 {
+            menu.addItem(
+                informationItem(
+                    title: "\(state.pendingCount) Moment\(state.pendingCount == 1 ? "" : "s") waiting to publish",
+                    systemImage: "clock.arrow.circlepath"
+                )
+            )
+        }
     }
 
     private static func addSharingItems(

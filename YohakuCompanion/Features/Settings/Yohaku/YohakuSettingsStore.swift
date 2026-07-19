@@ -117,6 +117,11 @@ final class YohakuSettingsStore: ObservableObject {
                 return "The saved Yohaku connection is missing. Pair this Mac again."
             case .previewOutOfDate:
                 return "Presence privacy settings changed. Review the updated public preview, then enable Live Desk again."
+            case .momentScopeMissing,
+                 .momentFeatureUnavailable,
+                 .momentSchemaUnsupported,
+                 .clientUpdateRequired:
+                return "Moment publishing is unavailable for this connection."
             }
         }
 

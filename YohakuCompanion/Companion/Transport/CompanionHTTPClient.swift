@@ -164,6 +164,20 @@ actor CompanionHTTPClient {
         )
     }
 
+    func publishRecently(
+        _ request: CompanionMomentRequestV1,
+        credential: CompanionDeviceCredential
+    ) async throws -> CompanionMomentMutationResponseV1 {
+        try await execute(
+            method: "POST",
+            path: "/companion/recently",
+            credential: credential,
+            body: request,
+            expectedRequestID: request.meta.requestID,
+            responseType: CompanionMomentMutationResponseV1.self
+        )
+    }
+
     func fetchPublicPresence() async throws -> CompanionPublicPresenceResponseV2 {
         try await execute(
             method: "GET",

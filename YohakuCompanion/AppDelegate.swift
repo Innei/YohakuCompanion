@@ -43,6 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Setup sleep/wake notifications for cache cleanup
         setupSleepWakeNotifications()
         configureUpdater()
+
     }
 
     func showSettings() {
@@ -135,6 +136,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // Live Desk authority; drain has already closed admission to new
             // operations synchronously.
             await SettingsMutationCoordinator.shared.drain()
+            ApplicationState.yohakuCompanionService?.shutdownMomentPublishing()
             if let companion = ApplicationState.companionLiveDeskCoordinator {
                 await companion.shutdown()
             }
@@ -177,6 +179,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func terminationDraftDecision() -> TerminationDraftDecision {
+        if ApplicationState.yohakuCompanionService?.isPublishingMoment == true {
+            let alert = NSAlert()
+            alert.alertStyle = .informational
+            alert.messageText = "Moment Publishing in Progress"
+            alert.informativeText =
+                "Wait for the current Moment to publish or enter the local outbox before quitting Yohaku Companion."
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+            return .cancel
+        }
+
         if ApplicationState.yohakuCompanionService?.isBusy == true {
             let alert = NSAlert()
             alert.alertStyle = .informational
