@@ -115,6 +115,7 @@ xcrun swiftc -warnings-as-errors -strict-concurrency=complete \
   YohakuCompanion/Companion/Domain/CompanionMediaSessionTracker.swift \
   YohakuCompanion/Presence/Capture/CompanionMediaPresenceSanitizer.swift \
   YohakuCompanion/Companion/Protocol/CompanionProtocolV2.swift \
+  YohakuCompanion/Companion/Protocol/CompanionMomentProtocol.swift \
   YohakuCompanion/Companion/Protocol/CompanionCapabilityNegotiator.swift \
   YohakuCompanion/Companion/Protocol/CompanionPresenceDTOMapper.swift \
   YohakuCompanion/Companion/Transport/CompanionHTTPClient.swift \
@@ -204,7 +205,7 @@ xcrun swiftc -warnings-as-errors -strict-concurrency=complete \
 /tmp/test_media_timing_semantics
 ```
 
-It verifies that unavailable timing remains `nil`, real zero remains `0`, enrichment fills only missing values, and a known duration clamps an out-of-range position.
+It verifies that unavailable timing remains `nil`, real zero remains `0`, enrichment fills only missing values, a known duration clamps an out-of-range position, and the authoritative global playback state wins over a contradictory player-specific playback rate without discarding enriched metadata.
 
 ## Settings mutations
 

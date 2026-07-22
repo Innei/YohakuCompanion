@@ -219,6 +219,58 @@ private struct MediaTimingSemanticsHarness {
       "a paused global session masked a supported player that was playing"
     )
 
+    var conflictingQQMusicState = MediaSessionSelectionState()
+    let pausedQQMusic = conflictingQQMusicState.select(
+      from: [
+        candidate(
+          applicationIdentifier: qqMusic,
+          source: .globalFallback,
+          playing: false,
+          name: "Global Metadata",
+          activityDate: Date(timeIntervalSince1970: 990)
+        ),
+        candidate(
+          applicationIdentifier: qqMusic,
+          source: .supportedPlayer,
+          playing: true,
+          name: "Supported Metadata",
+          activityDate: Date(timeIntervalSince1970: 900)
+        ),
+      ],
+      observedAt: observedAt
+    )
+    try expect(
+      pausedQQMusic?.playing == false,
+      "a stale supported-player playback rate overrode the global paused state"
+    )
+    try expect(
+      pausedQQMusic?.name == "Supported Metadata",
+      "reconciling playback state discarded supported-player metadata"
+    )
+
+    var reversedConflictState = MediaSessionSelectionState()
+    let playingQQMusic = reversedConflictState.select(
+      from: [
+        candidate(
+          applicationIdentifier: qqMusic,
+          source: .supportedPlayer,
+          playing: false,
+          activityDate: Date(timeIntervalSince1970: 900)
+        ),
+        candidate(
+          applicationIdentifier: qqMusic,
+          source: .globalFallback,
+          playing: true,
+          activityDate: Date(timeIntervalSince1970: 990)
+        ),
+      ],
+      observedAt: observedAt
+    )
+    try expect(
+      playingQQMusic?.playing == true,
+      "candidate order changed the authoritative global playback state"
+    )
+
     var emptySessionState = MediaSessionSelectionState()
     let emptySession = candidate(
       applicationIdentifier: neteaseMusic,

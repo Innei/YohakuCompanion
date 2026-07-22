@@ -228,21 +228,38 @@ struct MediaSessionSelectionState: Sendable {
         continue
       }
 
-      if shouldReplaceDuplicate(existing, with: candidate) {
-        result[identifier] = candidate
-      }
+      result[identifier] = resolveDuplicate(existing, candidate)
     }
 
     return result
+  }
+
+  /// The global MediaRemote session exposes the authoritative `localIsPlaying`
+  /// value, while a player-specific request can provide richer metadata but
+  /// only a stale playback-rate field. When both describe the same player,
+  /// retain the supported-player metadata and apply the global playback state.
+  private func resolveDuplicate(
+    _ existing: MediaSessionCandidate,
+    _ candidate: MediaSessionCandidate
+  ) -> MediaSessionCandidate {
+    guard existing.source != candidate.source else {
+      return shouldReplaceDuplicate(existing, with: candidate) ? candidate : existing
+    }
+
+    let supported = existing.source == .supportedPlayer ? existing : candidate
+    let global = existing.source == .globalFallback ? existing : candidate
+    return MediaSessionCandidate(
+      sessionIdentifier: supported.sessionIdentifier,
+      info: supported.info.replacingPlaybackState(with: global.info.playing),
+      source: .supportedPlayer,
+      reportedActivityDate: supported.reportedActivityDate
+    )
   }
 
   private func shouldReplaceDuplicate(
     _ existing: MediaSessionCandidate,
     with candidate: MediaSessionCandidate
   ) -> Bool {
-    if existing.source != candidate.source {
-      return candidate.source == .supportedPlayer
-    }
     if existing.info.playing != candidate.info.playing {
       return candidate.info.playing
     }

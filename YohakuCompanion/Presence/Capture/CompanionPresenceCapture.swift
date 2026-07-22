@@ -28,22 +28,18 @@ final class CompanionPresenceCapture {
     private let mediaSessionTracker: CompanionMediaSessionTracker
     private let mediaArtworkNormalizer: CompanionMediaArtworkNormalizer
     private let mediaPlaybackLinkResolver: any CompanionMediaPlaybackLinkResolving
-    private let pausedRetentionInterval: TimeInterval
 
     private var currentMediaIdentity: CompanionMediaSemanticIdentity?
-    private var pausedSince: Date?
 
     init(
         mediaSessionTracker: CompanionMediaSessionTracker? = nil,
         mediaArtworkNormalizer: CompanionMediaArtworkNormalizer = CompanionMediaArtworkNormalizer(),
         mediaPlaybackLinkResolver: any CompanionMediaPlaybackLinkResolving =
-            CompanionMediaPlaybackLinkResolver.shared,
-        pausedRetentionInterval: TimeInterval = 5 * 60
+            CompanionMediaPlaybackLinkResolver.shared
     ) {
         self.mediaSessionTracker = mediaSessionTracker ?? CompanionMediaSessionTracker()
         self.mediaArtworkNormalizer = mediaArtworkNormalizer
         self.mediaPlaybackLinkResolver = mediaPlaybackLinkResolver
-        self.pausedRetentionInterval = pausedRetentionInterval
     }
 
     func policyFingerprint() -> CompanionPresencePolicyFingerprint {
@@ -104,7 +100,6 @@ final class CompanionPresenceCapture {
 
     func resetMediaContinuity() {
         currentMediaIdentity = nil
-        pausedSince = nil
         mediaSessionTracker.reset()
     }
 
@@ -163,6 +158,10 @@ final class CompanionPresenceCapture {
             resetMediaContinuity()
             return nil
         }
+        guard mediaInfo.playing else {
+            resetMediaContinuity()
+            return nil
+        }
 
         // Preferences are deliberately loaded after the provider await. A
         // privacy rule tightened during capture therefore applies before any
@@ -217,19 +216,6 @@ final class CompanionPresenceCapture {
 
         if currentMediaIdentity != identity {
             currentMediaIdentity = identity
-            pausedSince = mediaInfo.playing ? nil : sampledAt
-        } else if mediaInfo.playing {
-            pausedSince = nil
-        } else if pausedSince == nil {
-            pausedSince = sampledAt
-        }
-
-        if let pausedSince,
-           !mediaInfo.playing,
-           sampledAt.timeIntervalSince(pausedSince) > pausedRetentionInterval
-        {
-            resetMediaContinuity()
-            return nil
         }
 
         let sessionID = mediaSessionTracker.sessionID(for: identity)

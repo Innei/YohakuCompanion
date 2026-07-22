@@ -494,9 +494,9 @@ struct MediaTimelineSample: Codable, Sendable {
 - `sessionID` 是本机生成的短期 UUID，在媒体语义身份变化时更新；Wire DTO 将其编码为 `sessionId`。不得通过标题 hash 暴露额外身份信息。
 - `position` 和 `duration` 必须为有限非负数。
 - 已知 duration 时，position 在发送前 clamp 到 `[0, duration]`。
-- Live Desk 的全局 Paused 与媒体 `state == paused` 是两个不同状态：前者清除全部公开投影，后者只停止媒体进度。
-- 曲目从 playing 进入 paused 后可以保留最多 5 分钟，`rate = 0`；超过保留期仍未恢复时清除媒体字段。
-- Provider 明确返回 stopped 或 no-media 时立即清除媒体，不等待 5 分钟保留期。
+- Live Desk 的全局 Paused 与协议中的媒体 `state == paused` 是两个不同状态；当前 Companion 发布策略不保留暂停媒体。
+- 曲目从 playing 进入 paused 后立即清除媒体字段并重置媒体会话连续性，不继续心跳续租旧曲目。
+- Provider 明确返回 stopped 或 no-media 时同样立即清除媒体。
 
 ### 12.3 采样与事件分离
 

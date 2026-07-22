@@ -50,6 +50,22 @@ public struct MediaInfo: Sendable {
     self.applicationIdentifier = applicationIdentifier
   }
 
+  func replacingPlaybackState(with playing: Bool) -> MediaInfo {
+    MediaInfo(
+      name: name,
+      artist: artist,
+      album: album,
+      image: image,
+      duration: duration,
+      elapsedTime: elapsedTime,
+      processID: processID,
+      processName: processName,
+      executablePath: executablePath,
+      playing: playing,
+      applicationIdentifier: applicationIdentifier
+    )
+  }
+
   private static func normalizedPlaybackTime(_ value: Double?) -> Double? {
     guard let value, value.isFinite, value >= 0 else { return nil }
     return value
