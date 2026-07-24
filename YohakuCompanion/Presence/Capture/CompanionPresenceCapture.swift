@@ -20,6 +20,11 @@ struct CompanionPresencePolicyFingerprint: Equatable, Sendable {
     let mediaProcessNameMappings: [NameMapping]
 }
 
+struct CompanionPresenceCaptureResult: Equatable, Sendable {
+    let snapshot: SanitizedPresenceSnapshot
+    let applicationIconAsset: ApplicationIconAsset?
+}
+
 /// Builds a fresh, privacy-sanitized Live Desk snapshot. Application and media
 /// are independent sources, so media-only Presence remains valid when no
 /// focused application can be read.
@@ -73,6 +78,14 @@ final class CompanionPresenceCapture {
     }
 
     func capture(includeMediaTimeline: Bool) async throws -> SanitizedPresenceSnapshot {
+        try await captureForDelivery(includeMediaTimeline: includeMediaTimeline).snapshot
+    }
+
+    /// Captures the public snapshot together with a local-only icon asset. The
+    /// caller must not upload the asset until Live Desk publishing is enabled.
+    func captureForDelivery(
+        includeMediaTimeline: Bool
+    ) async throws -> CompanionPresenceCaptureResult {
         try Task.checkCancellation()
 
         let enabledTypesBeforeFetch = PreferencesDataModel.enabledTypes.value.types
@@ -89,12 +102,15 @@ final class CompanionPresenceCapture {
         // privacy rule tightened during that suspension is applied to both
         // sources before the snapshot leaves this method.
         let enabledTypesAfterFetch = PreferencesDataModel.enabledTypes.value.types
-        let application = captureApplication(enabledTypes: enabledTypesAfterFetch)
+        let capturedApplication = captureApplication(enabledTypes: enabledTypesAfterFetch)
 
-        return SanitizedPresenceSnapshot(
-            observedAt: .now,
-            application: application,
-            media: media
+        return CompanionPresenceCaptureResult(
+            snapshot: SanitizedPresenceSnapshot(
+                observedAt: .now,
+                application: capturedApplication.presence,
+                media: media
+            ),
+            applicationIconAsset: capturedApplication.iconAsset
         )
     }
 
@@ -105,11 +121,11 @@ final class CompanionPresenceCapture {
 
     private func captureApplication(
         enabledTypes: Set<Reporter.Types>
-    ) -> SanitizedApplicationPresence? {
+    ) -> (presence: SanitizedApplicationPresence?, iconAsset: ApplicationIconAsset?) {
         guard enabledTypes.contains(.process),
               let process = ApplicationMonitor.shared.getFocusedWindowInfo()
         else {
-            return nil
+            return (nil, nil)
         }
 
         let evaluator = privacyEvaluator()
@@ -120,7 +136,7 @@ final class CompanionPresenceCapture {
             $0.type == .processName && $0.from == process.appName
         }?.to
 
-        return try? CompanionApplicationPresenceSanitizer.sanitize(
+        guard let presence = try? CompanionApplicationPresenceSanitizer.sanitize(
             capturedDisplayName: process.appName,
             mappedDisplayName: mappedName,
             displayAlias: decision.displayAlias,
@@ -128,6 +144,17 @@ final class CompanionPresenceCapture {
             sharesApplication: decision.sharesApplication,
             sharesWindowTitle: decision.sharesWindowTitle,
             globalWindowTitleSharingEnabled: PreferencesDataModel.shareWindowTitles.value
+        ) else {
+            return (nil, nil)
+        }
+
+        return (
+            presence,
+            ApplicationIconAsset(
+                applicationIdentifier: process.applicationIdentifier,
+                displayName: presence.displayName,
+                pngData: process.icon?.data
+            )
         )
     }
 

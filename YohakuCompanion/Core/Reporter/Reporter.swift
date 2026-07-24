@@ -324,8 +324,15 @@ class Reporter {
 			sharedAssetTask = nil
 		} else {
 			let task = Task { @MainActor [assetHostingService] in
-				await assetHostingService.resolveApplicationIcon(
-					for: data,
+				let asset = ApplicationIconAsset(
+					applicationIdentifier: data.sourceProcessApplicationIdentifier
+						?? data.processInfoRaw?.applicationIdentifier
+						?? "",
+					displayName: data.processName,
+					pngData: data.processInfoRaw?.icon?.data
+				)
+				return await assetHostingService.resolveApplicationIcon(
+					for: asset,
 					capability: assetCapability
 				)
 			}

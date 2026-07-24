@@ -37,7 +37,7 @@ enum AssetHostingMaintenanceError: LocalizedError {
 @MainActor
 protocol AssetHostingService {
     func resolveApplicationIcon(
-        for data: ReportModel,
+        for asset: ApplicationIconAsset,
         capability: PresenceAssetCapability
     ) async -> PresenceAssetResolution
 }
@@ -84,14 +84,14 @@ final class S3AssetHostingService: AssetHostingService {
     }
 
     func resolveApplicationIcon(
-        for data: ReportModel,
+        for asset: ApplicationIconAsset,
         capability: PresenceAssetCapability
     ) async -> PresenceAssetResolution {
         guard capability != .unsupported else { return .notRequested }
 
-        guard let applicationIdentifier = data.sourceProcessApplicationIdentifier
-                ?? data.processInfoRaw?.applicationIdentifier,
-              !applicationIdentifier.isEmpty
+        let applicationIdentifier = asset.applicationIdentifier
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !applicationIdentifier.isEmpty
         else { return .notRequested }
 
         let storedURL = await DataStore.shared.iconURL(for: applicationIdentifier)
@@ -109,9 +109,8 @@ final class S3AssetHostingService: AssetHostingService {
                 : .notConfigured
         }
 
-        guard let image = data.processInfoRaw?.icon,
-              let iconData = image.data,
-              let appName = data.processName,
+        guard let iconData = asset.pngData,
+              let appName = asset.displayName,
               !appName.isEmpty
         else {
             if let cachedURL {

@@ -40,6 +40,20 @@ extension CompanionMediaArtworkHostingConfiguration {
             )
         )
     }
+
+    var securePublicHost: String? {
+        guard let url = try? makeUploader().publicURL(for: "host-validation"),
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              components.scheme?.lowercased() == "https",
+              components.user == nil,
+              components.password == nil,
+              let host = components.host?.lowercased(),
+              !host.isEmpty
+        else {
+            return nil
+        }
+        return host
+    }
 }
 
 struct S3CompanionMediaArtworkUploader: CompanionMediaArtworkUploading {

@@ -491,6 +491,7 @@ struct MediaTimelineSample: Codable, Sendable {
 - `rate` 在 Release 1 只允许 `0` 或 `1`；未来可支持播客倍速。
 - Provider 未提供可信媒体类别时使用 `unknown`；不得仅凭标题文本推断类别。Release 1 可对明确的一方播放器标识采用受测试的映射。
 - 当前 Provider 只有 `playing` Boolean 时，DTO 前的领域转换使用 playing → (`state = playing`, `rate = 1`)，paused → (`state = paused`, `rate = 0`)。
+- 并发媒体会话必须分别采样播放状态。浏览器接管全局 Now Playing 后，一方播放器的暂停状态不得继续由其可能陈旧的 `playbackRate` 推断；播放器级 `isPlaying` 查询结果优先于该回退值。
 - `sessionID` 是本机生成的短期 UUID，在媒体语义身份变化时更新；Wire DTO 将其编码为 `sessionId`。不得通过标题 hash 暴露额外身份信息。
 - `position` 和 `duration` 必须为有限非负数。
 - 已知 duration 时，position 在发送前 clamp 到 `[0, duration]`。

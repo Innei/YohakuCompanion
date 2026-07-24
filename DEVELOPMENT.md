@@ -205,7 +205,7 @@ xcrun swiftc -warnings-as-errors -strict-concurrency=complete \
 /tmp/test_media_timing_semantics
 ```
 
-It verifies that unavailable timing remains `nil`, real zero remains `0`, enrichment fills only missing values, a known duration clamps an out-of-range position, and the authoritative global playback state wins over a contradictory player-specific playback rate without discarding enriched metadata.
+It verifies that unavailable timing remains `nil`, real zero remains `0`, enrichment fills only missing values, a known duration clamps an out-of-range position, supported-player playback state does not remain stale after a browser takes over the global session, and the authoritative global playback state wins over a contradictory player-specific fallback without discarding enriched metadata.
 
 ## Settings mutations
 

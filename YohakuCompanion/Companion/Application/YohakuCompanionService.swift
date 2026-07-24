@@ -560,6 +560,14 @@ final class YohakuCompanionService: ObservableObject {
                 self?.handleCapturePolicyChange()
             })
             .disposed(by: capturePolicySubscriptions)
+
+        PreferencesDataModel.s3Integration
+            .skip(1)
+            .observe(on: MainScheduler.instance)
+            .subscribe(onNext: { [weak self] _ in
+                self?.coordinator.applicationIconHostingConfigurationDidChange()
+            })
+            .disposed(by: capturePolicySubscriptions)
     }
 
     private func handleCapturePolicyChange() {

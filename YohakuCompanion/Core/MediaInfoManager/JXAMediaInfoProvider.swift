@@ -25,7 +25,11 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
 
   private static let script = #"""
     ObjC.import("Foundation")
-    ObjC.bindFunction("objc_msgSend", ["void", ["id", "selector", "id"]])
+    ObjC.bindFunction("dispatch_queue_create", ["id", ["string", "void*"]])
+    ObjC.bindFunction(
+      "objc_msgSend",
+      ["void", ["id", "selector", "id", "id"]]
+    )
 
     function isNil(value) {
       if (value === null || value === undefined) return true
@@ -172,6 +176,16 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
       const artworkSelector = $.NSSelectorFromString(
         "requestNowPlayingItemArtworkWithCompletion:"
       )
+      // A player's Now Playing info may retain playbackRate=1 after it pauses.
+      // Query playback state on the same player path because localIsPlaying can
+      // belong to a browser or another concurrent media session.
+      const isPlayingSelector = $.NSSelectorFromString(
+        "requestIsPlayingOnQueue:completion:"
+      )
+      const requestQueue = $.dispatch_queue_create(
+        "dev.innei.YohakuCompanion.media-remote",
+        null
+      )
 
       const playerPath = MRNowPlayingRequest.localNowPlayingPlayerPath
       const client = isNil(playerPath) ? null : playerPath.client
@@ -203,6 +217,8 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
           info: null,
           infoCompleted: false,
           infoError: null,
+          isPlaying: null,
+          isPlayingCompleted: false,
           lastPlayingDate: null
         }
         states.push(state)
@@ -218,6 +234,7 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
           if (!request.respondsToSelector(infoSelector)) {
             state.artworkCompleted = true
             state.infoCompleted = true
+            state.isPlayingCompleted = true
             state.dateCompleted = true
             continue
           }
@@ -241,7 +258,33 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
             infoBridge.holder,
             infoBridge.block
           )
-          $.objc_msgSend(request, infoSelector, infoBridge.block)
+          $.objc_msgSend(request, infoSelector, infoBridge.block, null)
+
+          if (request.respondsToSelector(isPlayingSelector)) {
+            const isPlayingCallback = ObjC.block(
+              ["void", ["id", "id"]],
+              function(isPlaying, error) {
+                state.isPlayingCompleted = true
+                state.isPlaying = isNil(error) && !isNil(isPlaying)
+                  ? Boolean(unwrap(isPlaying))
+                  : false
+              }
+            )
+            const isPlayingBridge = materializeNativeBlock(isPlayingCallback)
+            keepAlive.push(
+              isPlayingCallback,
+              isPlayingBridge.holder,
+              isPlayingBridge.block
+            )
+            $.objc_msgSend(
+              request,
+              isPlayingSelector,
+              requestQueue,
+              isPlayingBridge.block
+            )
+          } else {
+            state.isPlayingCompleted = true
+          }
 
           if (request.respondsToSelector(artworkSelector)) {
             const artworkCallback = ObjC.block(
@@ -259,7 +302,7 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
               artworkBridge.holder,
               artworkBridge.block
             )
-            $.objc_msgSend(request, artworkSelector, artworkBridge.block)
+            $.objc_msgSend(request, artworkSelector, artworkBridge.block, null)
           } else {
             state.artworkCompleted = true
           }
@@ -274,7 +317,7 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
             )
             const dateBridge = materializeNativeBlock(dateCallback)
             keepAlive.push(dateCallback, dateBridge.holder, dateBridge.block)
-            $.objc_msgSend(request, lastPlayingDateSelector, dateBridge.block)
+            $.objc_msgSend(request, lastPlayingDateSelector, dateBridge.block, null)
           } else {
             state.dateCompleted = true
           }
@@ -282,6 +325,7 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
           // Keep the existing global provider behavior when a future macOS
           // release removes a targeted selector for one adapted player.
           state.infoCompleted = true
+          state.isPlayingCompleted = true
           state.dateCompleted = true
           state.artworkCompleted = true
         }
@@ -292,6 +336,7 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
         states.some(
           state =>
             !state.infoCompleted ||
+            !state.isPlayingCompleted ||
             !state.dateCompleted ||
             !state.artworkCompleted
         ) &&
@@ -300,6 +345,16 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
         $.NSRunLoop.currentRunLoop.runUntilDate(
           $.NSDate.dateWithTimeIntervalSinceNow(0.02)
         )
+      }
+
+      // Once the player-scoped API has accepted a request, never revive a
+      // stale playbackRate when its callback fails to arrive by the deadline.
+      // A later poll can restore playing state from a fresh response.
+      for (const state of states) {
+        if (!state.isPlayingCompleted) {
+          state.isPlaying = false
+          state.isPlayingCompleted = true
+        }
       }
 
       for (const state of states) {
@@ -313,7 +368,7 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
               state.info,
               state.bundleIdentifier,
               "supported",
-              null,
+              state.isPlaying,
               state.lastPlayingDate,
               state.artwork
             )
@@ -323,7 +378,9 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
 
       return JSON.stringify({
         candidates: candidates,
-        complete: states.every(state => state.infoCompleted)
+        complete: states.every(
+          state => state.infoCompleted && state.isPlayingCompleted
+        )
       })
     }
     """#

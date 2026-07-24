@@ -147,7 +147,7 @@ Live presentation uses `PresenceDestinationDeliveryResult` and a separate `Prese
 - Per-destination sending, success, failure, and skipped state.
 - Independent asset degradation.
 
-S3 is represented by `S3AssetHostingService`. It resolves a cached public URL or performs an on-demand upload only when a registered destination declares optional or required public-URL capability. Failed uploads add only the local application identifier and display name to a durable retry queue; credentials and icon data are never persisted there. Maintenance can retry that queue or rebuild current cache records from installed application icons. Discord does not depend on S3 because it uses Discord asset keys.
+S3 is represented by `S3AssetHostingService`. It resolves a cached public URL or performs an on-demand upload only when a registered destination or an explicitly enabled Live Desk session can consume a public application-icon URL. Live Desk receives only a URL whose HTTPS host matches the active asset-hosting configuration; the local application identifier and PNG candidate never enter the sanitized snapshot. Failed uploads add only the local application identifier and privacy-sanitized display name to a durable retry queue; credentials and icon data are never persisted there. Maintenance can retry that queue or rebuild current cache records from installed application icons. Discord does not depend on S3 because it uses Discord asset keys.
 
 ## Sync Event Persistence
 

@@ -19,6 +19,7 @@ final class CompanionLiveDeskCoordinator {
     private let connectionStore: CompanionConnectionStore
     private let capture: CompanionPresenceCapture
     private let mediaArtworkHost: CompanionMediaArtworkHost
+    private let applicationIconHostingService: any AssetHostingService
     private let clientVersion: String
     private let authorityRegistry = CompanionPresenceAuthorityRegistry()
 
@@ -47,6 +48,7 @@ final class CompanionLiveDeskCoordinator {
     private var supportsMediaTimeline = false
     private var supportsMediaArtwork = false
     private var mediaArtworkDeviceID: String?
+    private var allowedApplicationIconHosts = Set<String>()
     private var lifecycle = CompanionCoordinatorLifecycle()
     private var client: (any CompanionPresenceSending)? {
         authorityRegistry.currentClient
@@ -64,6 +66,7 @@ final class CompanionLiveDeskCoordinator {
         connectionStore: CompanionConnectionStore,
         capture: CompanionPresenceCapture,
         clientVersion: String,
+        applicationIconHostingService: any AssetHostingService = S3AssetHostingService(),
         mediaArtworkHost: CompanionMediaArtworkHost = CompanionMediaArtworkHost(
             uploader: S3CompanionMediaArtworkUploader()
         )
@@ -71,6 +74,7 @@ final class CompanionLiveDeskCoordinator {
         self.connectionStore = connectionStore
         self.capture = capture
         self.clientVersion = clientVersion
+        self.applicationIconHostingService = applicationIconHostingService
         self.mediaArtworkHost = mediaArtworkHost
     }
 
@@ -172,6 +176,12 @@ final class CompanionLiveDeskCoordinator {
         }
     }
 
+    func applicationIconHostingConfigurationDidChange() {
+        guard state != .suspended, !lifecycle.isStopping else { return }
+        authorityRegistry.discard()
+        start()
+    }
+
     private func configure(generation currentGeneration: Int) async {
         do {
             guard let metadata = try await connectionStore.loadMetadata() else {
@@ -219,7 +229,14 @@ final class CompanionLiveDeskCoordinator {
                 supportsMediaTimeline = configuration.supportsMediaTimeline
                 supportsMediaArtwork = configuration.supportsMediaArtwork
                 mediaArtworkDeviceID = connection.metadata.deviceID
+                let hostingConfiguration = CompanionMediaArtworkHostingConfiguration(
+                    integration: PreferencesDataModel.s3Integration.value
+                )
+                allowedApplicationIconHosts = Set(
+                    hostingConfiguration?.securePublicHost.map { [$0] } ?? []
+                )
                 let mapper = CompanionPresenceDTOMapper(
+                    allowedAssetHosts: allowedApplicationIconHosts,
                     includesMediaArtwork: configuration.supportsMediaArtwork,
                     includesMediaPlaybackLinks: configuration.supportsMediaPlaybackLinks,
                     minimumLeaseSeconds: configuration.minimumLeaseSeconds,
@@ -309,10 +326,22 @@ final class CompanionLiveDeskCoordinator {
             }
             do {
                 lastSendStartedAt = ContinuousClock().now
-                var snapshot = try await capture.capture(
+                let captureResult = try await capture.captureForDelivery(
                     includeMediaTimeline: supportsMediaTimeline
                 )
+                var snapshot = captureResult.snapshot
                 guard generation == currentGeneration, !Task.isCancelled else { return }
+                if let iconAsset = captureResult.applicationIconAsset {
+                    let resolution = await applicationIconHostingService
+                        .resolveApplicationIcon(
+                            for: iconAsset,
+                            capability: .optionalPublicURL
+                        )
+                    guard generation == currentGeneration, !Task.isCancelled else { return }
+                    if let iconURL = allowedApplicationIconURL(from: resolution.publicURL) {
+                        snapshot = snapshot.replacingApplicationIcon(iconURL)
+                    }
+                }
                 if supportsMediaArtwork,
                    let artwork = snapshot.media?.artwork,
                    let deviceID = mediaArtworkDeviceID,
@@ -388,6 +417,22 @@ final class CompanionLiveDeskCoordinator {
                 self.requestFreshSnapshot()
             }
         }
+    }
+
+    private func allowedApplicationIconURL(from value: String?) -> URL? {
+        guard let value,
+              let url = URL(string: value),
+              let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              components.scheme?.lowercased() == "https",
+              components.user == nil,
+              components.password == nil,
+              let host = components.host?.lowercased(),
+              allowedApplicationIconHosts.contains(host),
+              value.utf8.count <= 2_048
+        else {
+            return nil
+        }
+        return url
     }
 
     private func installActivationObserver() {
@@ -505,6 +550,7 @@ final class CompanionLiveDeskCoordinator {
         supportsMediaTimeline = false
         supportsMediaArtwork = false
         mediaArtworkDeviceID = nil
+        allowedApplicationIconHosts = []
         removeMediaObservation()
         capture.resetMediaContinuity()
         removeActivationObserver()

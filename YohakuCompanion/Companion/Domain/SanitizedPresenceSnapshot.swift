@@ -53,6 +53,27 @@ struct SanitizedApplicationPresence: Equatable, Sendable {
         self.windowTitle = PresenceTextNormalizer.optional(windowTitle)
         self.iconURL = iconURL
     }
+
+    private init(
+        normalizedDisplayName: String,
+        activity: SanitizedApplicationActivity?,
+        windowTitle: String?,
+        iconURL: URL?
+    ) {
+        displayName = normalizedDisplayName
+        self.activity = activity
+        self.windowTitle = windowTitle
+        self.iconURL = iconURL
+    }
+
+    func replacingIconURL(_ iconURL: URL?) -> Self {
+        Self(
+            normalizedDisplayName: displayName,
+            activity: activity,
+            windowTitle: windowTitle,
+            iconURL: iconURL
+        )
+    }
 }
 
 struct SanitizedMediaPlayback: Equatable, Sendable {
@@ -190,6 +211,14 @@ struct SanitizedPresenceSnapshot: Equatable, Sendable {
             observedAt: observedAt,
             application: application,
             media: media?.replacingArtwork(artwork)
+        )
+    }
+
+    func replacingApplicationIcon(_ iconURL: URL?) -> Self {
+        Self(
+            observedAt: observedAt,
+            application: application?.replacingIconURL(iconURL),
+            media: media
         )
     }
 }

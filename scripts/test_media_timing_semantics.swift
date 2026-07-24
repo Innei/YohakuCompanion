@@ -219,6 +219,51 @@ private struct MediaTimingSemanticsHarness {
       "a paused global session masked a supported player that was playing"
     )
 
+    var browserTakeoverState = MediaSessionSelectionState()
+    let browserPlayingAfterQQMusicPaused = browserTakeoverState.select(
+      from: [
+        candidate(
+          applicationIdentifier: qqMusic,
+          source: .supportedPlayer,
+          playing: false,
+          activityDate: Date(timeIntervalSince1970: 900)
+        ),
+        candidate(
+          applicationIdentifier: chrome,
+          source: .globalFallback,
+          playing: true,
+          activityDate: Date(timeIntervalSince1970: 990)
+        ),
+      ],
+      observedAt: observedAt
+    )
+    try expect(
+      browserPlayingAfterQQMusicPaused?.applicationIdentifier == chrome,
+      "a paused supported player masked the active browser session"
+    )
+
+    let allSessionsPaused = browserTakeoverState.select(
+      from: [
+        candidate(
+          applicationIdentifier: qqMusic,
+          source: .supportedPlayer,
+          playing: false,
+          activityDate: Date(timeIntervalSince1970: 900)
+        ),
+        candidate(
+          applicationIdentifier: chrome,
+          source: .globalFallback,
+          playing: false,
+          activityDate: Date(timeIntervalSince1970: 990)
+        ),
+      ],
+      observedAt: Date(timeIntervalSince1970: 1_010)
+    )
+    try expect(
+      allSessionsPaused?.playing == false,
+      "concurrent sessions retained a stale playing state after both paused"
+    )
+
     var conflictingQQMusicState = MediaSessionSelectionState()
     let pausedQQMusic = conflictingQQMusicState.select(
       from: [

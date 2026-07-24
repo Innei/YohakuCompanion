@@ -26,6 +26,7 @@ private struct CompanionProtocolV2Harness {
         try verifiesMillisecondsAndPositionClamp()
         try verifiesInvalidPlaybackIsRejected()
         try verifiesUnapprovedIconHostIsRejected()
+        try verifiesApprovedHostedApplicationIconIsEncoded()
         try verifiesMediaArtworkCapabilityEncoding()
         try verifiesMediaPlaybackLinkCapabilityEncoding()
         try verifiesPublicStateRequiresNullableKeys()
@@ -198,6 +199,39 @@ private struct CompanionProtocolV2Harness {
         } catch CompanionPresenceMappingError.invalidIconURL {
             return
         }
+    }
+
+    private static func verifiesApprovedHostedApplicationIconIsEncoded() throws {
+        let application = try SanitizedApplicationPresence(displayName: "Xcode")
+        let snapshot = SanitizedPresenceSnapshot(
+            observedAt: .now,
+            application: application,
+            media: nil
+        ).replacingApplicationIcon(
+            URL(string: "https://assets.example.com/apps/xcode.png")
+        )
+        let request = try CompanionPresenceDTOMapper(
+            allowedAssetHosts: ["ASSETS.EXAMPLE.COM"]
+        ).makePresenceRequest(
+            snapshot: snapshot,
+            deviceID: deviceID,
+            sequence: 6,
+            requestID: requestID(6)
+        )
+        let object = try jsonObject(request)
+        let data = try dictionary(object["data"], path: "data")
+        let encodedApplication = try dictionary(
+            data["application"],
+            path: "data.application"
+        )
+        let icon = try dictionary(
+            encodedApplication["icon"],
+            path: "data.application.icon"
+        )
+        try expect(
+            icon["url"] as? String == "https://assets.example.com/apps/xcode.png",
+            "approved hosted application icon was not encoded"
+        )
     }
 
     private static func verifiesMediaArtworkCapabilityEncoding() throws {
