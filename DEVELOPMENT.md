@@ -142,7 +142,7 @@ xcrun swiftc -warnings-as-errors -strict-concurrency=complete \
 /tmp/test_media_playback_links
 ```
 
-It verifies strict local queue matching for QQ Music and NetEase Cloud Music, fail-closed behavior for ambiguous tracks, canonical provider URL construction, and rejection of spoofed or tracking-bearing URLs.
+It verifies strict local queue matching for QQ Music and NetEase Cloud Music, fail-closed behavior for ambiguous tracks, canonical provider URL construction, restricted NetEase cover enrichment, and rejection of spoofed or tracking-bearing URLs.
 
 The protected connection and explicit-null application capture boundary has a separate harness:
 

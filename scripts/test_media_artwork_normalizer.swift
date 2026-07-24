@@ -32,6 +32,13 @@ private enum MediaArtworkNormalizerHarness {
             "content hash was not derived from normalized PNG bytes"
         )
         try expect(first.contentHash == second.contentHash, "normalization was not deterministic")
+        guard let downloaded = await normalizer.normalize(source) else {
+            throw HarnessFailure.assertion("downloaded artwork bytes were rejected")
+        }
+        try expect(
+            downloaded.contentHash == first.contentHash,
+            "downloaded artwork bytes used a different normalization path"
+        )
         let invalidArtwork = await normalizer.normalize("not-base64")
         try expect(
             invalidArtwork == nil,

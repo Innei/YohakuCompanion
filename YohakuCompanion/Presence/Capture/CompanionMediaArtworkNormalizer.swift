@@ -24,6 +24,19 @@ actor CompanionMediaArtworkNormalizer {
         else {
             return nil
         }
+        return normalizeSourceData(sourceData)
+    }
+
+    func normalize(_ sourceData: Data?) -> SanitizedMediaArtwork? {
+        guard let sourceData,
+              sourceData.count <= maximumEncodedCharacters
+        else {
+            return nil
+        }
+        return normalizeSourceData(sourceData)
+    }
+
+    private func normalizeSourceData(_ sourceData: Data) -> SanitizedMediaArtwork? {
         let sourceHash = sourceData.sha256()
         if cachedSourceHash == sourceHash {
             return cachedArtwork

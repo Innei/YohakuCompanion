@@ -3,9 +3,17 @@ import SQLite3
 
 protocol CompanionMediaPlaybackLinkResolving: Sendable {
     func resolvePlaybackURL(for mediaInfo: MediaInfo) async -> URL?
+    func resolveArtworkData(for mediaInfo: MediaInfo) async -> Data?
+}
+
+extension CompanionMediaPlaybackLinkResolving {
+    func resolveArtworkData(for _: MediaInfo) async -> Data? {
+        nil
+    }
 }
 
 typealias QQMusicSongDetailsLoader = @Sendable ([String]) async -> [MediaPlaybackQueueTrack]
+typealias NetEaseMusicArtworkLoader = @Sendable (URL) async -> Data?
 
 actor CompanionMediaPlaybackLinkResolver: CompanionMediaPlaybackLinkResolving {
     static let shared = CompanionMediaPlaybackLinkResolver()
@@ -19,6 +27,7 @@ actor CompanionMediaPlaybackLinkResolver: CompanionMediaPlaybackLinkResolving {
     private let homeDirectory: URL
     private let cacheLifetime: TimeInterval
     private let qqMusicSongDetailsLoader: QQMusicSongDetailsLoader
+    private let netEaseMusicArtworkLoader: NetEaseMusicArtworkLoader
     private var cachedResolution: CachedResolution?
 
     init(
@@ -26,11 +35,15 @@ actor CompanionMediaPlaybackLinkResolver: CompanionMediaPlaybackLinkResolving {
         cacheLifetime: TimeInterval = 15,
         qqMusicSongDetailsLoader: @escaping QQMusicSongDetailsLoader = {
             await QQMusicSongDetails.fetch(songMIDs: $0)
+        },
+        netEaseMusicArtworkLoader: @escaping NetEaseMusicArtworkLoader = {
+            await NetEaseMusicArtworkDownloader.fetch(from: $0)
         }
     ) {
         self.homeDirectory = homeDirectory
         self.cacheLifetime = max(0, cacheLifetime)
         self.qqMusicSongDetailsLoader = qqMusicSongDetailsLoader
+        self.netEaseMusicArtworkLoader = netEaseMusicArtworkLoader
     }
 
     func resolvePlaybackURL(for mediaInfo: MediaInfo) async -> URL? {
@@ -61,6 +74,32 @@ actor CompanionMediaPlaybackLinkResolver: CompanionMediaPlaybackLinkResolving {
 
         cachedResolution = CachedResolution(query: query, url: url, resolvedAt: .now)
         return url
+    }
+
+    func resolveArtworkData(for mediaInfo: MediaInfo) async -> Data? {
+        guard let query = CompanionMediaPlaybackLinkQuery(mediaInfo: mediaInfo),
+              query.applicationIdentifier
+                == CompanionMediaPlaybackLinkQuery.netEaseMusicBundleIdentifier
+        else {
+            return nil
+        }
+
+        let homeDirectory = homeDirectory
+        let task = Task.detached(priority: .utility) {
+            let url = NetEaseMusicPlaybackQueue.playingListURL(
+                homeDirectory: homeDirectory
+            )
+            guard let data = try? Data(contentsOf: url, options: [.mappedIfSafe]) else {
+                return nil as URL?
+            }
+            return NetEaseMusicPlaybackQueue.resolveArtworkURL(query: query, data: data)
+        }
+        let artworkURL = await withTaskCancellationHandler(
+            operation: { await task.value },
+            onCancel: { task.cancel() }
+        )
+        guard !Task.isCancelled, let artworkURL else { return nil }
+        return await netEaseMusicArtworkLoader(artworkURL)
     }
 
     private nonisolated static func resolve(
@@ -115,17 +154,9 @@ actor CompanionMediaPlaybackLinkResolver: CompanionMediaPlaybackLinkResolving {
             return CompanionMediaPlaybackURLPolicy.qqMusicURL(songMID: match.identifier)
 
         case CompanionMediaPlaybackLinkQuery.netEaseMusicBundleIdentifier:
-            let url = homeDirectory
-                .appendingPathComponent("Library", isDirectory: true)
-                .appendingPathComponent("Containers", isDirectory: true)
-                .appendingPathComponent("com.netease.163music", isDirectory: true)
-                .appendingPathComponent("Data", isDirectory: true)
-                .appendingPathComponent("Documents", isDirectory: true)
-                .appendingPathComponent("storage", isDirectory: true)
-                .appendingPathComponent("file_storage", isDirectory: true)
-                .appendingPathComponent("webdata", isDirectory: true)
-                .appendingPathComponent("file", isDirectory: true)
-                .appendingPathComponent("playingList", isDirectory: false)
+            let url = NetEaseMusicPlaybackQueue.playingListURL(
+                homeDirectory: homeDirectory
+            )
             guard let data = try? Data(contentsOf: url, options: [.mappedIfSafe]) else {
                 return nil
             }
@@ -414,6 +445,23 @@ struct MediaPlaybackQueueTrack: Equatable, Sendable {
     let artists: [String]
     let album: String?
     let durationSeconds: Double?
+    let artworkURL: URL?
+
+    init(
+        identifier: String,
+        title: String,
+        artists: [String],
+        album: String?,
+        durationSeconds: Double?,
+        artworkURL: URL? = nil
+    ) {
+        self.identifier = identifier
+        self.title = title
+        self.artists = artists
+        self.album = album
+        self.durationSeconds = durationSeconds
+        self.artworkURL = artworkURL
+    }
 }
 
 enum MediaPlaybackQueueMatcher {
@@ -658,7 +706,36 @@ final class QQMusicArchivedAlbum: NSObject, NSSecureCoding {
 }
 
 enum NetEaseMusicPlaybackQueue {
+    static func playingListURL(homeDirectory: URL) -> URL {
+        homeDirectory
+            .appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent("Containers", isDirectory: true)
+            .appendingPathComponent("com.netease.163music", isDirectory: true)
+            .appendingPathComponent("Data", isDirectory: true)
+            .appendingPathComponent("Documents", isDirectory: true)
+            .appendingPathComponent("storage", isDirectory: true)
+            .appendingPathComponent("file_storage", isDirectory: true)
+            .appendingPathComponent("webdata", isDirectory: true)
+            .appendingPathComponent("file", isDirectory: true)
+            .appendingPathComponent("playingList", isDirectory: false)
+    }
+
     static func resolve(query: CompanionMediaPlaybackLinkQuery, data: Data) -> URL? {
+        guard let match = resolveTrack(query: query, data: data) else { return nil }
+        return CompanionMediaPlaybackURLPolicy.netEaseMusicURL(songID: match.identifier)
+    }
+
+    static func resolveArtworkURL(
+        query: CompanionMediaPlaybackLinkQuery,
+        data: Data
+    ) -> URL? {
+        resolveTrack(query: query, data: data)?.artworkURL
+    }
+
+    private static func resolveTrack(
+        query: CompanionMediaPlaybackLinkQuery,
+        data: Data
+    ) -> MediaPlaybackQueueTrack? {
         guard let queue = try? JSONDecoder().decode(NetEaseMusicPlayingList.self, from: data) else {
             return nil
         }
@@ -675,13 +752,84 @@ enum NetEaseMusicPlaybackQueue {
                 title: title,
                 artists: track.artists?.compactMap(\.name) ?? [],
                 album: track.album?.name,
-                durationSeconds: track.duration.map { Double($0) / 1_000 }
+                durationSeconds: track.duration.map { Double($0) / 1_000 },
+                artworkURL: NetEaseMusicArtworkURLPolicy.normalizedURL(
+                    track.album?.picUrl ?? track.album?.cover
+                )
             )
         }
-        guard let match = MediaPlaybackQueueMatcher.match(query: query, candidates: candidates) else {
+        return MediaPlaybackQueueMatcher.match(query: query, candidates: candidates)
+    }
+}
+
+enum NetEaseMusicArtworkURLPolicy {
+    static func normalizedURL(_ value: String?) -> URL? {
+        guard let value,
+              var components = URLComponents(string: value),
+              components.scheme == "http" || components.scheme == "https",
+              components.user == nil,
+              components.password == nil,
+              components.port == nil,
+              components.fragment == nil,
+              let host = components.host?.lowercased(),
+              isAllowedHost(host),
+              !components.percentEncodedPath.isEmpty
+        else {
             return nil
         }
-        return CompanionMediaPlaybackURLPolicy.netEaseMusicURL(songID: match.identifier)
+
+        components.scheme = "https"
+        components.host = host
+        components.queryItems = [URLQueryItem(name: "param", value: "512y512")]
+        return components.url
+    }
+
+    private static func isAllowedHost(_ host: String) -> Bool {
+        let labels = host.split(separator: ".", omittingEmptySubsequences: false)
+        guard labels.count == 4,
+              labels[1] == "music",
+              labels[2] == "126",
+              labels[3] == "net"
+        else {
+            return false
+        }
+        let shard = labels[0]
+        return shard.first == "p"
+            && shard.dropFirst().allSatisfy(\.isNumber)
+            && shard.count > 1
+    }
+}
+
+enum NetEaseMusicArtworkDownloader {
+    private static let maximumResponseBytes = 4 * 1_024 * 1_024
+
+    static func fetch(from url: URL) async -> Data? {
+        guard NetEaseMusicArtworkURLPolicy.normalizedURL(url.absoluteString) == url else {
+            return nil
+        }
+
+        var request = URLRequest(
+            url: url,
+            cachePolicy: .returnCacheDataElseLoad,
+            timeoutInterval: 3
+        )
+        request.httpMethod = "GET"
+        request.setValue("image/avif,image/webp,image/*", forHTTPHeaderField: "Accept")
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let response = response as? HTTPURLResponse,
+                  response.statusCode == 200,
+                  response.mimeType?.lowercased().hasPrefix("image/") == true,
+                  !data.isEmpty,
+                  data.count <= maximumResponseBytes
+            else {
+                return nil
+            }
+            return data
+        } catch {
+            return nil
+        }
     }
 }
 
@@ -701,6 +849,8 @@ private struct NetEaseMusicTrack: Decodable {
 
     struct Album: Decodable {
         let name: String?
+        let picUrl: String?
+        let cover: String?
     }
 
     let id: LosslessStringIdentifier?

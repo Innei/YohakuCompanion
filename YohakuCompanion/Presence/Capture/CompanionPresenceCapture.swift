@@ -201,7 +201,7 @@ final class CompanionPresenceCapture {
             resetMediaContinuity()
             return nil
         }
-        async let artworkResolution = mediaArtworkNormalizer.normalize(mediaInfo.image)
+        async let artworkResolution = resolveArtwork(for: mediaInfo)
         async let playbackURLResolution = mediaPlaybackLinkResolver.resolvePlaybackURL(
             for: mediaInfo
         )
@@ -271,6 +271,14 @@ final class CompanionPresenceCapture {
             resetMediaContinuity()
             return nil
         }
+    }
+
+    private func resolveArtwork(for mediaInfo: MediaInfo) async -> SanitizedMediaArtwork? {
+        if let providerArtwork = await mediaArtworkNormalizer.normalize(mediaInfo.image) {
+            return providerArtwork
+        }
+        let artworkData = await mediaPlaybackLinkResolver.resolveArtworkData(for: mediaInfo)
+        return await mediaArtworkNormalizer.normalize(artworkData)
     }
 
     private func privacyEvaluator() -> PresencePrivacyEvaluator {

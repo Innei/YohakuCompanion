@@ -28,6 +28,8 @@ private struct MediaPlaybackLinksHarness {
         try writeNetEaseMusicFixture(to: temporaryHome)
 
         let songDetailsData = try makeQQMusicSongDetailsFixture()
+        let artworkRecorder = ArtworkURLRecorder()
+        let expectedArtworkData = Data([0x89, 0x50, 0x4E, 0x47])
         let resolver = CompanionMediaPlaybackLinkResolver(
             homeDirectory: temporaryHome,
             qqMusicSongDetailsLoader: { songMIDs in
@@ -35,12 +37,21 @@ private struct MediaPlaybackLinksHarness {
                     from: songDetailsData,
                     requestedSongMIDs: songMIDs
                 )
+            },
+            netEaseMusicArtworkLoader: { url in
+                await artworkRecorder.record(url)
+                return expectedArtworkData
             }
         )
         try await verifiesQQMusicResolution(resolver: resolver)
         try await verifiesQQMusicDatabaseFallback(resolver: resolver)
         try await verifiesQQMusicAutoMixFallback(resolver: resolver)
         try await verifiesNetEaseMusicResolution(resolver: resolver)
+        try await verifiesNetEaseMusicArtworkResolution(
+            resolver: resolver,
+            recorder: artworkRecorder,
+            expectedData: expectedArtworkData
+        )
         try verifiesAmbiguousMatchesFailClosed()
         try verifiesProviderURLPolicy()
         try await verifiesUnsupportedPlayersRemainUnlinked(resolver: resolver)
@@ -112,6 +123,37 @@ private struct MediaPlaybackLinksHarness {
         try expect(
             url?.absoluteString == "https://music.163.com/song?id=3339827986",
             "NetEase Music did not resolve the current playingList track.id"
+        )
+    }
+
+    private static func verifiesNetEaseMusicArtworkResolution(
+        resolver: CompanionMediaPlaybackLinkResolver,
+        recorder: ArtworkURLRecorder,
+        expectedData: Data
+    ) async throws {
+        let info = makeMediaInfo(
+            title: "让我走向你",
+            artist: "忘乡",
+            album: "让我走向你",
+            duration: 168.671,
+            applicationIdentifier: CompanionMediaPlaybackLinkQuery.netEaseMusicBundleIdentifier
+        )
+        let data = await resolver.resolveArtworkData(for: info)
+        try expect(data == expectedData, "NetEase Music artwork data was not returned")
+        let urls = await recorder.urls
+        try expect(
+            urls == [
+                URL(
+                    string: "https://p3.music.126.net/fixture-cover.jpg?param=512y512"
+                )!
+            ],
+            "NetEase Music artwork URL was not restricted and normalized"
+        )
+        try expect(
+            NetEaseMusicArtworkURLPolicy.normalizedURL(
+                "https://p3.music.126.net.evil.example/fixture-cover.jpg"
+            ) == nil,
+            "a spoofed NetEase Music artwork host was accepted"
         )
     }
 
@@ -264,7 +306,10 @@ private struct MediaPlaybackLinksHarness {
                         "name": "让我走向你",
                         "duration": 168_671,
                         "artists": [["name": "忘乡"]],
-                        "album": ["name": "让我走向你"],
+                        "album": [
+                            "name": "让我走向你",
+                            "picUrl": "http://p3.music.126.net/fixture-cover.jpg",
+                        ],
                     ],
                 ],
                 [
@@ -391,6 +436,14 @@ private struct MediaPlaybackLinksHarness {
         _ message: String
     ) throws {
         guard condition() else { throw HarnessFailure.assertion(message) }
+    }
+}
+
+private actor ArtworkURLRecorder {
+    private(set) var urls: [URL] = []
+
+    func record(_ url: URL) {
+        urls.append(url)
     }
 }
 
