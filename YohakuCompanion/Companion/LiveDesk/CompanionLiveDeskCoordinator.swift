@@ -66,7 +66,7 @@ final class CompanionLiveDeskCoordinator {
         connectionStore: CompanionConnectionStore,
         capture: CompanionPresenceCapture,
         clientVersion: String,
-        applicationIconHostingService: any AssetHostingService = S3AssetHostingService(),
+        applicationIconHostingService: (any AssetHostingService)? = nil,
         mediaArtworkHost: CompanionMediaArtworkHost = CompanionMediaArtworkHost(
             uploader: S3CompanionMediaArtworkUploader()
         )
@@ -74,7 +74,7 @@ final class CompanionLiveDeskCoordinator {
         self.connectionStore = connectionStore
         self.capture = capture
         self.clientVersion = clientVersion
-        self.applicationIconHostingService = applicationIconHostingService
+        self.applicationIconHostingService = applicationIconHostingService ?? S3AssetHostingService()
         self.mediaArtworkHost = mediaArtworkHost
     }
 
