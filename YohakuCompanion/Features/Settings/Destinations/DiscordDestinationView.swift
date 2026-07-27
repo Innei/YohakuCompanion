@@ -51,7 +51,7 @@ struct DiscordDestinationView: View {
             }
             .buttonStyle(.link)
         } advanced: {
-            DestinationFormRow("Large Image Asset Key") {
+            DestinationFormRow("Fallback Large Image Asset Key or HTTPS URL") {
                 TextField("Optional", text: $store.discordDraft.customLargeImageKey)
                     .textFieldStyle(.roundedBorder)
             }
@@ -64,28 +64,18 @@ struct DiscordDestinationView: View {
                     .textFieldStyle(.roundedBorder)
             }
             Divider()
-            Label("Rich Presence buttons are unavailable in this build.", systemImage: "info.circle")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            if store.discordDraft.enableButtons
-                || !store.discordDraft.buttonLabel.isEmpty
-                || !store.discordDraft.buttonURL.isEmpty
-            {
-                Text("Existing button values are retained for compatibility but are not tested or published by the bundled Discord transport.")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
+            Toggle("Publish a Rich Presence button", isOn: $store.discordDraft.enableButtons)
+            if store.discordDraft.enableButtons {
                 DestinationFormRow("Button Label") {
                     TextField("Open", text: $store.discordDraft.buttonLabel)
                         .textFieldStyle(.roundedBorder)
-                        .disabled(true)
                 }
                 DestinationFormRow("Button URL") {
                     TextField("https://example.com", text: $store.discordDraft.buttonURL)
                         .textFieldStyle(.roundedBorder)
-                        .disabled(true)
                 }
             }
-            Text("Image asset keys must already exist in the Discord application. Testing publishes the supported fields from this draft, temporarily replaces the current Rich Presence, then clears it; it does not save.")
+            Text("Images may use an asset key from this Discord application or a public HTTPS URL. Testing publishes the Social SDK fields from this draft, temporarily replaces the current Rich Presence, then clears it; it does not save.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

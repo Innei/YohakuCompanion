@@ -7,11 +7,6 @@
 
 import Foundation
 
-struct DiscordButton {
-    let label: String
-    let url: String
-}
-
 enum DiscordActivityType: Int {
     case playing = 0
     case streaming = 1
@@ -27,9 +22,11 @@ protocol DiscordClient: AnyObject {
     var connectionGeneration: UInt64 { get }
     func initialize(applicationId: String)
     func setActivity(
+        name: String?,
         details: String?,
         state: String?,
         activityType: DiscordActivityType?,
+        statusDisplayType: DiscordStatusDisplayType?,
         startTimestamp: Int64?,
         endTimestamp: Int64?,
         largeImageKey: String?,
@@ -59,9 +56,11 @@ final class NoopDiscordClient: DiscordClient {
     }
 
     func setActivity(
+        name: String?,
         details: String?,
         state: String?,
         activityType: DiscordActivityType?,
+        statusDisplayType: DiscordStatusDisplayType?,
         startTimestamp: Int64?,
         endTimestamp: Int64?,
         largeImageKey: String?,

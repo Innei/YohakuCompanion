@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Setup Discord Game SDK for Yohaku Companion
-# - Downloads the SDK zip
-# - Extracts macOS headers and dylib
-# - Places them under Vendor/Discord/{include,lib}
+# Install Discord Social SDK for Yohaku Companion from the official C++ archive.
+# Discord distributes this archive only through an enabled application's
+# Developer Portal Downloads page, so the repository cannot provide a public
+# default URL.
 #
 # Usage:
-#   bash scripts/setup_discord_sdk.sh [SDK_URL] [SDK_SHA256]
+#   bash scripts/setup_discord_sdk.sh /path/to/DiscordSocialSdk-1.9.17379.zip
+#   bash scripts/setup_discord_sdk.sh /path/to/a-newer-sdk.zip SHA256
 #
-# Defaults to v3.2.1 if URL not provided:
-#   https://dl-game-sdk.discordapp.net/3.2.1/discord_game_sdk.zip
-#
-# Requirements: curl, unzip, find, awk, lipo
+# The same values may be supplied through:
+#   DISCORD_SOCIAL_SDK_ARCHIVE
+#   DISCORD_SOCIAL_SDK_SHA256
 
-DEFAULT_URL="https://dl-game-sdk.discordapp.net/3.2.1/discord_game_sdk.zip"
-DEFAULT_SHA256="6757bb4a1f5b42aa7b6707cbf2158420278760ac5d80d40ca708bb01d20ae6b4"
-SDK_URL="${1:-${DISCORD_SDK_URL:-$DEFAULT_URL}}"
-SDK_SHA256="${2:-${DISCORD_SDK_SHA256:-$DEFAULT_SHA256}}"
+PINNED_VERSION="1.9.17379"
+PINNED_SHA256="b94694bf839a509fa72c3f20b1881b8ebf19c5344065d85d2a19041554759863"
+SDK_ARCHIVE="${1:-${DISCORD_SOCIAL_SDK_ARCHIVE:-}}"
+SDK_SHA256="${2:-${DISCORD_SOCIAL_SDK_SHA256:-$PINNED_SHA256}}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -25,87 +25,98 @@ VENDOR_DIR="$ROOT_DIR/Vendor/Discord"
 INCLUDE_DIR="$VENDOR_DIR/include"
 LIB_DIR="$VENDOR_DIR/lib"
 
-echo "[setup] Using SDK URL: $SDK_URL"
+if [[ -z "$SDK_ARCHIVE" ]]; then
+  echo "Usage: $0 /path/to/DiscordSocialSdk-$PINNED_VERSION.zip [SHA256]" >&2
+  echo "Download the C++ SDK from Discord Developer Portal > Social SDK > Downloads." >&2
+  exit 64
+fi
+if [[ ! -f "$SDK_ARCHIVE" ]]; then
+  echo "[setup] ERROR: Social SDK archive does not exist: $SDK_ARCHIVE" >&2
+  exit 1
+fi
+if [[ ! "$SDK_SHA256" =~ ^[0-9a-fA-F]{64}$ ]]; then
+  echo "[setup] ERROR: SHA-256 must contain exactly 64 hexadecimal characters." >&2
+  exit 1
+fi
 
-mkdir -p "$INCLUDE_DIR" "$LIB_DIR"
-
-TMP_DIR="$(mktemp -d 2>/dev/null || mktemp -d -t discord_sdk)"
-ZIP_PATH="$TMP_DIR/discord_game_sdk.zip"
+TMP_DIR="$(mktemp -d 2>/dev/null || mktemp -d -t discord_social_sdk)"
 EXTRACT_DIR="$TMP_DIR/extract"
-mkdir -p "$EXTRACT_DIR"
+STAGED_INCLUDE_DIR="$TMP_DIR/include"
+STAGED_LIB_DIR="$TMP_DIR/lib"
+mkdir -p "$EXTRACT_DIR" "$STAGED_INCLUDE_DIR" "$STAGED_LIB_DIR"
 
 cleanup() { rm -rf "$TMP_DIR" || true; }
 trap cleanup EXIT
 
-echo "[setup] Downloading SDK to $ZIP_PATH ..."
-curl -fL \
-  --connect-timeout 15 \
-  --max-time 180 \
-  --retry 3 \
-  --retry-all-errors \
-  --retry-delay 2 \
-  --retry-max-time 240 \
-  "$SDK_URL" \
-  -o "$ZIP_PATH"
-
-echo "[setup] Verifying SDK archive checksum ..."
-ACTUAL_SHA256="$(shasum -a 256 "$ZIP_PATH" | awk '{print $1}')"
-if [[ "$ACTUAL_SHA256" != "$SDK_SHA256" ]]; then
-  echo "[setup] ERROR: Discord SDK checksum mismatch." >&2
-  echo "[setup] Expected: $SDK_SHA256" >&2
+echo "[setup] Verifying Social SDK archive checksum ..."
+ACTUAL_SHA256="$(shasum -a 256 "$SDK_ARCHIVE" | awk '{print $1}')"
+NORMALIZED_EXPECTED_SHA256="$(printf '%s' "$SDK_SHA256" | tr '[:upper:]' '[:lower:]')"
+if [[ "$ACTUAL_SHA256" != "$NORMALIZED_EXPECTED_SHA256" ]]; then
+  echo "[setup] ERROR: Discord Social SDK checksum mismatch." >&2
+  echo "[setup] Expected: $NORMALIZED_EXPECTED_SHA256" >&2
   echo "[setup] Actual:   $ACTUAL_SHA256" >&2
   exit 1
 fi
 
-echo "[setup] Extracting SDK ..."
-unzip -q "$ZIP_PATH" -d "$EXTRACT_DIR"
+echo "[setup] Extracting Social SDK ..."
+unzip -q "$SDK_ARCHIVE" -d "$EXTRACT_DIR"
 
-# Locate C++ headers directory (should contain discord.h and all dependencies)
-CPP_HEADERS_DIR="$(find "$EXTRACT_DIR" -maxdepth 4 -type d -name "cpp" | head -n1 || true)"
-HEADER_C="$(find "$EXTRACT_DIR" -maxdepth 4 -type f -name "discord_game_sdk.h" | head -n1 || true)"
-
-if [[ -n "$CPP_HEADERS_DIR" && -f "$CPP_HEADERS_DIR/discord.h" ]]; then
-  echo "[setup] Found C++ headers directory: $CPP_HEADERS_DIR"
-  echo "[setup] Copying all C++ headers..."
-  CPP_HEADERS=("$CPP_HEADERS_DIR"/*.h)
-  cp -f "${CPP_HEADERS[@]}" "$INCLUDE_DIR/"
-  echo "[setup] Copied ${#CPP_HEADERS[@]} header files"
-elif [[ -n "$HEADER_C" ]]; then
-  echo "[setup] WARNING: C++ headers not found; using C header: $HEADER_C"
-  echo "         The bridge will use the C header directly."
-  cp -f "$HEADER_C" "$INCLUDE_DIR/discord_game_sdk.h"
-else
-  echo "[setup] ERROR: Could not locate C++ headers or discord_game_sdk.h in the SDK archive." >&2
+DISCORDPP_HEADER="$(find "$EXTRACT_DIR" -type f -name discordpp.h -print -quit)"
+SOCIAL_DYLIB="$(find "$EXTRACT_DIR" -type f -name libdiscord_partner_sdk.dylib -print -quit)"
+if [[ -z "$DISCORDPP_HEADER" ]]; then
+  echo "[setup] ERROR: The archive does not contain discordpp.h." >&2
   exit 1
 fi
-
-# Install only the Apple Silicon dylib. Yohaku Companion does not support
-# Intel Macs, so retaining an x86_64 slice would increase the release size and
-# weaken the arm64-only artifact invariant.
-ARM64_DYLIB="$(find "$EXTRACT_DIR" \( -path "*/aarch64/*.dylib" -o -path "*/arm64/*.dylib" \) | head -n1 || true)"
-
-if [[ -z "$ARM64_DYLIB" ]]; then
-  echo "[setup] ERROR: Discord SDK archive does not contain an arm64 macOS dylib." >&2
+if [[ -z "$SOCIAL_DYLIB" ]]; then
+  echo "[setup] ERROR: The archive does not contain libdiscord_partner_sdk.dylib." >&2
   exit 1
 fi
 if ! command -v lipo >/dev/null 2>&1; then
-  echo "[setup] ERROR: lipo is required to verify the Discord SDK dylib." >&2
+  echo "[setup] ERROR: lipo is required to prepare the Apple Silicon SDK input." >&2
+  exit 1
+fi
+if ! command -v install_name_tool >/dev/null 2>&1; then
+  echo "[setup] ERROR: install_name_tool is required to prepare the SDK dylib." >&2
   exit 1
 fi
 
-echo "[setup] Found arm64 dylib: $ARM64_DYLIB"
-cp -f "$ARM64_DYLIB" "$LIB_DIR/discord_game_sdk.dylib"
+HEADER_DIR="$(dirname "$DISCORDPP_HEADER")"
+while IFS= read -r -d '' header; do
+  cp -f "$header" "$STAGED_INCLUDE_DIR/"
+done < <(find "$HEADER_DIR" -maxdepth 1 -type f -name '*.h' -print0)
 
-echo "[setup] Verifying outputs ..."
-ls -l "$INCLUDE_DIR" || true
-ls -l "$LIB_DIR" || true
+ARCHITECTURES="$(lipo -archs "$SOCIAL_DYLIB")"
+case " $ARCHITECTURES " in
+  *" arm64 "*)
+    if [[ "$ARCHITECTURES" == "arm64" ]]; then
+      cp -f "$SOCIAL_DYLIB" "$STAGED_LIB_DIR/libdiscord_partner_sdk.dylib"
+    else
+      lipo "$SOCIAL_DYLIB" -thin arm64 \
+        -output "$STAGED_LIB_DIR/libdiscord_partner_sdk.dylib"
+    fi
+    ;;
+  *)
+    echo "[setup] ERROR: Social SDK dylib has no arm64 slice: $ARCHITECTURES" >&2
+    exit 1
+    ;;
+esac
 
-# Reject any accidental Intel slice in the vendored release input.
-ARCHS="$(lipo -archs "$LIB_DIR/discord_game_sdk.dylib")"
-echo "[setup] dylib architectures: $ARCHS"
-if [[ "$ARCHS" != "arm64" ]]; then
-  echo "[setup] ERROR: Discord SDK dylib is not arm64-only: $ARCHS" >&2
+install_name_tool -id '@rpath/libdiscord_partner_sdk.dylib' \
+  "$STAGED_LIB_DIR/libdiscord_partner_sdk.dylib"
+
+STAGED_ARCHITECTURES="$(lipo -archs "$STAGED_LIB_DIR/libdiscord_partner_sdk.dylib")"
+if [[ "$STAGED_ARCHITECTURES" != "arm64" ]]; then
+  echo "[setup] ERROR: Staged Social SDK dylib is not arm64-only: $STAGED_ARCHITECTURES" >&2
   exit 1
 fi
 
-echo "[setup] Done. You can now build the Xcode project."
+# Replace the ignored proprietary input as one validated unit so legacy SDK
+# headers or binaries cannot remain alongside the Social SDK.
+rm -rf "$INCLUDE_DIR" "$LIB_DIR"
+mkdir -p "$INCLUDE_DIR" "$LIB_DIR"
+cp -f "$STAGED_INCLUDE_DIR"/*.h "$INCLUDE_DIR/"
+cp -f "$STAGED_LIB_DIR/libdiscord_partner_sdk.dylib" "$LIB_DIR/"
+
+echo "[setup] Installed Discord Social SDK input (arm64)."
+echo "[setup] Header: $INCLUDE_DIR/discordpp.h"
+echo "[setup] Library: $LIB_DIR/libdiscord_partner_sdk.dylib"

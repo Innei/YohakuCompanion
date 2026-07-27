@@ -1064,14 +1064,17 @@ final class SettingsStore: ObservableObject {
         let details: String?
         let state: String?
         let activityType: DiscordActivityType?
+        let statusDisplayType: DiscordStatusDisplayType?
         if showsMedia {
             details = preview.mediaTitle
             state = preview.mediaArtist
             activityType = integration.useListeningForMedia ? .listening : nil
+            statusDisplayType = integration.useListeningForMedia ? .details : nil
         } else if integration.showProcessInfo, hasApplication {
-            details = preview.applicationName
+            details = preview.applicationName.map { "正在使用 \($0)" }
             state = preview.windowTitle
-            activityType = nil
+            activityType = .playing
+            statusDisplayType = .details
         } else {
             throw DestinationSettingsError.providerMessage(
                 "Nothing is shareable to Discord after Privacy & Rules"
@@ -1081,7 +1084,7 @@ final class SettingsStore: ObservableObject {
         try? await DiscordClientProvider.shared.clearActivity()
         DiscordClientProvider.shared.shutdown()
         DiscordClientProvider.shared.initialize(applicationId: integration.applicationId)
-        try await Task.sleep(nanoseconds: 750_000_000)
+        try await Task.sleep(for: .milliseconds(750))
         guard DiscordClientProvider.shared.isConnected else {
             restoreDiscordConnection(savedIntegration)
             throw DestinationSettingsError.providerMessage(
@@ -1091,20 +1094,32 @@ final class SettingsStore: ObservableObject {
             )
         }
         do {
+            let normalizedButtons = integration.enableButtons
+                ? DiscordTransportContract.button(
+                    DiscordButton(
+                        label: integration.buttonLabel,
+                        url: integration.buttonUrl
+                    )
+                ).map { [$0] }
+                : nil
             try await DiscordClientProvider.shared.setActivity(
-                details: details,
-                state: state,
+                name: "Yohaku Companion",
+                details: DiscordTransportContract.text(details),
+                state: DiscordTransportContract.text(state),
                 activityType: activityType,
+                statusDisplayType: statusDisplayType,
                 startTimestamp: integration.showTimestamps
-                    ? Int64(Date().timeIntervalSince1970) : nil,
+                    ? Int64((Date.now.timeIntervalSince1970 * 1_000).rounded(.down)) : nil,
                 endTimestamp: nil,
                 largeImageKey: integration.customLargeImageKey.isEmpty
-                    ? nil : integration.customLargeImageKey,
+                    ? nil
+                    : DiscordTransportContract.assetIdentifier(integration.customLargeImageKey),
                 largeImageText: nil,
                 smallImageKey: integration.brandSmallImageKey.isEmpty
-                    ? nil : integration.brandSmallImageKey,
+                    ? nil
+                    : DiscordTransportContract.assetIdentifier(integration.brandSmallImageKey),
                 smallImageText: "Yohaku Companion",
-                buttons: nil
+                buttons: normalizedButtons
             )
         } catch {
             DiscordClientProvider.shared.shutdown()

@@ -11,8 +11,8 @@
 		1F1B30112DA3CAAE003F298D /* Alamofire in Frameworks */ = {isa = PBXBuildFile; productRef = 1F1B30102DA3CAAE003F298D /* Alamofire */; };
 		1FD8C8D62DA27E59009F6BCB /* SnapKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1FD8C8D52DA27E59009F6BCB /* SnapKit */; };
 		5A0000012F10000000000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 5A0000032F10000000000001 /* Sparkle */; };
-		DCD0000A2E0A100000000001 /* discord_game_sdk.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = DCD000092E0A100000000001 /* discord_game_sdk.dylib */; };
-		DCD0000B2E0A100000000001 /* discord_game_sdk.dylib in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = DCD000092E0A100000000001 /* discord_game_sdk.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		DCD0000A2E0A100000000001 /* libdiscord_partner_sdk.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = DCD000092E0A100000000001 /* libdiscord_partner_sdk.dylib */; };
+		DCD0000B2E0A100000000001 /* libdiscord_partner_sdk.dylib in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = DCD000092E0A100000000001 /* libdiscord_partner_sdk.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -22,7 +22,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 10;
 			files = (
-				DCD0000B2E0A100000000001 /* discord_game_sdk.dylib in Embed Frameworks */,
+				DCD0000B2E0A100000000001 /* libdiscord_partner_sdk.dylib in Embed Frameworks */,
 			);
 			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -32,7 +32,7 @@
 /* Begin PBXFileReference section */
 		1FD8C8BD2DA258F3009F6BCB /* YohakuCompanion_DEV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = YohakuCompanion_DEV.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DCD000062E0A100000000001 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
-		DCD000092E0A100000000001 /* discord_game_sdk.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = discord_game_sdk.dylib; path = Vendor/Discord/lib/discord_game_sdk.dylib; sourceTree = SOURCE_ROOT; };
+		DCD000092E0A100000000001 /* libdiscord_partner_sdk.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libdiscord_partner_sdk.dylib; path = Vendor/Discord/lib/libdiscord_partner_sdk.dylib; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -65,7 +65,7 @@
 				1F1B2FF52DA3B3AB003F298D /* RxCocoa in Frameworks */,
 				1FD8C8D62DA27E59009F6BCB /* SnapKit in Frameworks */,
 				5A0000012F10000000000001 /* Sparkle in Frameworks */,
-				DCD0000A2E0A100000000001 /* discord_game_sdk.dylib in Frameworks */,
+				DCD0000A2E0A100000000001 /* libdiscord_partner_sdk.dylib in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -99,7 +99,7 @@
 		DCD000052E0A100000000001 /* lib */ = {
 			isa = PBXGroup;
 			children = (
-				DCD000092E0A100000000001 /* discord_game_sdk.dylib */,
+				DCD000092E0A100000000001 /* libdiscord_partner_sdk.dylib */,
 			);
 			path = lib;
 			sourceTree = "<group>";

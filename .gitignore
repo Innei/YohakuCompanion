@@ -19,6 +19,6 @@ dist/
 *.pem
 *.key
 
-# Discord's proprietary SDK is downloaded from the pinned, checksum-verified
-# archive by scripts/setup_discord_sdk.sh.
+# Discord's proprietary Social SDK is installed from a checksum-verified
+# Developer Portal archive by scripts/setup_discord_sdk.sh.
 Vendor/Discord

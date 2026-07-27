@@ -16,10 +16,10 @@ Accessibility is optional at the product level and is required only for window-t
 
 The project, target, scheme, module, and source directory use `YohakuCompanion`. Debug builds use `dev.innei.YohakuCompanion.debug` and produce `YohakuCompanion_DEV.app`; Release builds use `dev.innei.YohakuCompanion` and produce `YohakuCompanion.app`. Credential storage derives its namespace from the active bundle identifier, so development builds cannot read or replace release credentials.
 
-On a clean checkout, install the pinned Discord Game SDK input first. The script verifies the downloaded archive against the repository-pinned SHA-256 before copying the arm64 headers and dylib into the ignored `Vendor/Discord` directory.
+On a clean checkout, enable Discord Social SDK for the application in the Discord Developer Portal, download the pinned C++ archive, and install that proprietary input first. Discord does not provide a public stable download URL for Social SDK archives. The installer pins release `1.9.17379` to SHA-256 `b94694bf839a509fa72c3f20b1881b8ebf19c5344065d85d2a19041554759863`, verifies the local archive, and copies the C++ header set and Apple Silicon `libdiscord_partner_sdk.dylib` input into the ignored `Vendor/Discord` directory. A newer SDK requires its checksum as the second argument.
 
 ```bash
-bash scripts/setup_discord_sdk.sh
+bash scripts/setup_discord_sdk.sh /path/to/DiscordSocialSdk-1.9.17379.zip
 
 xcodebuild \
   -project YohakuCompanion.xcodeproj \
@@ -42,6 +42,31 @@ xcodebuild \
   CODE_SIGNING_ALLOWED=NO \
   SWIFT_STRICT_CONCURRENCY=complete \
   analyze
+```
+
+## Discord Social SDK behavior harnesses
+
+The transport harness validates externally observable Social SDK payload rules: Unicode character limits, Developer Portal asset identifiers, public HTTPS artwork URLs, credential rejection, and Rich Presence button normalization.
+
+```bash
+xcrun swiftc -warnings-as-errors -strict-concurrency=complete \
+  YohakuCompanion/Core/Discord/DiscordButton.swift \
+  YohakuCompanion/Core/Discord/DiscordTransportContract.swift \
+  scripts/test_discord_transport_contract.swift \
+  -o /tmp/test_discord_transport_contract
+
+/tmp/test_discord_transport_contract
+```
+
+The timeline harness independently validates the Social SDK millisecond contract, including media progress, duration exhaustion, negative input normalization, missing elapsed time, and pre-epoch capture bounds.
+
+```bash
+xcrun swiftc -warnings-as-errors -strict-concurrency=complete \
+  YohakuCompanion/Core/Discord/DiscordActivityTimeline.swift \
+  scripts/test_discord_activity_timeline.swift \
+  -o /tmp/test_discord_activity_timeline
+
+/tmp/test_discord_activity_timeline
 ```
 
 ## Ownership boundaries

@@ -32,7 +32,7 @@ case "$DISTRIBUTION_MODE" in
     ;;
 esac
 
-DISCORD_BINARY="$APP_PATH/Contents/Frameworks/discord_game_sdk.dylib"
+DISCORD_BINARY="$APP_PATH/Contents/Frameworks/libdiscord_partner_sdk.dylib"
 SPARKLE_FRAMEWORK="$APP_PATH/Contents/Frameworks/Sparkle.framework"
 SPARKLE_VERSION="$SPARKLE_FRAMEWORK/Versions/Current"
 SPARKLE_BINARY="$SPARKLE_VERSION/Sparkle"

@@ -106,7 +106,7 @@ Sync History stores a bounded local audit of sanitized Bridge delivery attempts 
 ## Development
 
 ```bash
-bash scripts/setup_discord_sdk.sh
+bash scripts/setup_discord_sdk.sh /path/to/DiscordSocialSdk-1.9.17379.zip
 
 xcodebuild \
   -project YohakuCompanion.xcodeproj \

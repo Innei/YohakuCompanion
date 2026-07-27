@@ -2,7 +2,7 @@
 //  DiscordSDKBridge.h
 //  YohakuCompanion
 //
-//  A lightweight Objective-C++ bridge for Discord Game SDK.
+//  A lightweight Objective-C++ bridge for Discord Social SDK.
 //  This header is safe to include even when the official SDK
 //  is not linked; the implementation provides no-op behavior
 //  when the SDK header is unavailable.
@@ -54,8 +54,10 @@ NS_ASSUME_NONNULL_BEGIN
                 smallImageText:(NSString *_Nullable)smallImageText
                        buttons:(NSArray<NSDictionary<NSString *, NSString *> *> *_Nullable)buttons;
 - (void)setActivityWithDetails:(NSString *_Nullable)details
+                  activityName:(NSString *_Nullable)activityName
                          state:(NSString *_Nullable)state
                    activityType:(NSNumber *_Nullable)activityType
+              statusDisplayType:(NSNumber *_Nullable)statusDisplayType
                 startTimestamp:(NSNumber *_Nullable)startTimestamp
                   endTimestamp:(NSNumber *_Nullable)endTimestamp
                  largeImageKey:(NSString *_Nullable)largeImageKey

@@ -722,10 +722,28 @@ extension DiscordIntegration {
     }
 
     var isValidPresenceDestination: Bool {
-        guard let value = Int64(
+        guard let value = UInt64(
             applicationId.trimmingCharacters(in: .whitespacesAndNewlines)
-        ) else { return false }
-        return value > 0
+        ), value > 0 else { return false }
+
+        if customLargeImageKey.hasNonWhitespaceContent,
+           DiscordTransportContract.assetIdentifier(customLargeImageKey) == nil
+        {
+            return false
+        }
+        if brandSmallImageKey.hasNonWhitespaceContent,
+           DiscordTransportContract.assetIdentifier(brandSmallImageKey) == nil
+        {
+            return false
+        }
+        if enableButtons,
+           DiscordTransportContract.button(
+            DiscordButton(label: buttonLabel, url: buttonUrl)
+           ) == nil
+        {
+            return false
+        }
+        return true
     }
 }
 
@@ -766,7 +784,7 @@ struct DiscordIntegration: UserDefaultsJSONStorable, DictionaryConvertible {
     var useListeningForMedia: Bool = true
     var showTimestamps: Bool = true
 
-    // Asset keys (must be pre-uploaded in Discord Dev Portal)
+    // Social SDK accepts Developer Portal asset keys or public HTTPS image URLs.
     var customLargeImageKey: String = ""
     var customLargeImageText: String = ""
     var brandSmallImageKey: String = ""

@@ -10,10 +10,11 @@
 
 ## Build and verification
 
-On a clean checkout, run the checksum-pinned Discord SDK installer before Xcode builds:
+On a clean checkout, download the C++ Discord Social SDK archive from the
+Developer Portal and run the checksum-pinned installer before Xcode builds:
 
 ```bash
-bash scripts/setup_discord_sdk.sh
+bash scripts/setup_discord_sdk.sh /path/to/DiscordSocialSdk-1.9.17379.zip
 xcodebuild \
   -project YohakuCompanion.xcodeproj \
   -scheme YohakuCompanion \

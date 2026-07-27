@@ -1,14 +1,14 @@
 # Discord Rich Presence Integration Design (Official SDK)
 
-> Status: legacy implementation reference. The current product identity and user-facing copy are defined by `YOHAKU_COMPANION_PRODUCT_SPEC.md` and use **Yohaku Companion**. Source paths below use the current `YohakuCompanion/` directory. Legacy examples may still show the former Discord asset key; current runtime defaults the branding key to empty and publishes no small image until a Developer Portal asset is configured explicitly.
+> Status: superseded legacy Game SDK reference. The current implementation uses Discord Social SDK direct Rich Presence through `DiscordSDKBridge`. The historical architecture below is retained only for provenance and must not be used as current setup guidance.
 
 ## Overview
 
 This document outlines the original implementation design for the optional Discord Bridge now shipped by Yohaku Companion.
 
-**Final Approach**: Official Discord Game SDK with C++/Objective-C++ bridge to Swift, providing the most stable and feature-complete Rich Presence integration.
+**Historical Approach**: Official Discord Game SDK with a C++/Objective-C++ bridge to Swift.
 
-Note on assets feasibility: Discord Rich Presence does not support arbitrary external image URLs for activity assets. Large/small images must reference pre-uploaded Asset Keys in the Discord Developer Portal for the specific Application ID. Therefore, prior mention of “S3 uploaded icons as large image” is not technically feasible with the official SDK (nor typical RPC libraries). This design has been adjusted accordingly: we will use pre-uploaded asset keys (configurable), and fall back to branding-only images when a specific icon is not available.
+Current Social SDK asset fields accept either Developer Portal asset identifiers or public external image URLs. Yohaku Companion restricts configured external images to HTTPS and continues to treat the document below as historical Game SDK behavior.
 
 ## Architectural Analysis
 

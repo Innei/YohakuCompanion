@@ -37,10 +37,9 @@ final class DiscordSDKClient: NSObject, DiscordClient {
         }
 
         self.applicationId = applicationId
-		bridge.initialize(withApplicationId: applicationId)
-        // DiscordCreate is synchronous. Reflect the bridge state immediately
-        // instead of failing the first report while the delegate callback waits
-        // on the next main-run-loop turn.
+        bridge.initialize(withApplicationId: applicationId)
+        // Direct Rich Presence initialization is synchronous. Reflect the bridge
+        // state before the delegate callback reaches the next main-run-loop turn.
         isConnected = bridge.isConnected
         DiscordDebugStore.shared.update { snapshot in
             snapshot.clientKind = "sdk"
@@ -50,9 +49,11 @@ final class DiscordSDKClient: NSObject, DiscordClient {
     }
 
     func setActivity(
+        name: String?,
         details: String?,
         state: String?,
         activityType: DiscordActivityType?,
+        statusDisplayType: DiscordStatusDisplayType?,
         startTimestamp: Int64?,
         endTimestamp: Int64?,
         largeImageKey: String?,
@@ -85,8 +86,10 @@ final class DiscordSDKClient: NSObject, DiscordClient {
                     continuation.resume(with: result)
                 }
                 bridge.setActivityWithDetails(details,
+                                              activityName: name,
                                               state: state,
                                               activityType: activityType.map { NSNumber(value: $0.rawValue) },
+                                              statusDisplayType: statusDisplayType.map { NSNumber(value: $0.rawValue) },
                                               startTimestamp: startTimestamp.map(NSNumber.init(value:)),
                                               endTimestamp: endTimestamp.map(NSNumber.init(value:)),
                                               largeImageKey: largeImageKey,

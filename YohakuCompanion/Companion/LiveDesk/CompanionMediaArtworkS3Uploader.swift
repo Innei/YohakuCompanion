@@ -1,5 +1,14 @@
 import Foundation
 
+extension CompanionMediaArtworkHost {
+    /// Process-wide host shared by Live Desk and external Presence destinations.
+    /// Sharing the actor preserves the single-object ordering guarantee and
+    /// prevents the same normalized cover from being uploaded twice.
+    static let shared = CompanionMediaArtworkHost(
+        uploader: S3CompanionMediaArtworkUploader()
+    )
+}
+
 extension CompanionMediaArtworkHostingConfiguration {
     init?(integration: S3Integration) {
         guard integration.isEnabled,
