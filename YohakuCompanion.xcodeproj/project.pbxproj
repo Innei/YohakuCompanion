@@ -287,7 +287,7 @@
 				CODE_SIGN_ENTITLEMENTS = YohakuCompanion/YohakuCompanion.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 19;
+				CURRENT_PROJECT_VERSION = 20;
 				DEVELOPMENT_TEAM = 7VYQTBFBS5;
 				ENABLE_HARDENED_RUNTIME = YES;
 				EXECUTABLE_NAME = YohakuCompanion;
@@ -304,7 +304,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.8.5;
+				MARKETING_VERSION = 1.8.6;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.innei.YohakuCompanion.debug;
 				PRODUCT_MODULE_NAME = YohakuCompanion;
 				PRODUCT_NAME = YohakuCompanion_DEV;
@@ -324,7 +324,7 @@
 				CODE_SIGN_ENTITLEMENTS = YohakuCompanion/YohakuCompanion.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 19;
+				CURRENT_PROJECT_VERSION = 20;
 				DEVELOPMENT_TEAM = 7VYQTBFBS5;
 				ENABLE_HARDENED_RUNTIME = YES;
 				EXECUTABLE_NAME = YohakuCompanion;
@@ -341,7 +341,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.8.5;
+				MARKETING_VERSION = 1.8.6;
 				PRODUCT_BUNDLE_IDENTIFIER = dev.innei.YohakuCompanion;
 				PRODUCT_MODULE_NAME = YohakuCompanion;
 				PRODUCT_NAME = YohakuCompanion;
