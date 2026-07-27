@@ -131,10 +131,11 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
       }
     }
 
-    // JavaScriptObjC cannot pass a JavaScript callback directly to a method
-    // whose block signature comes only from a private framework. A Foundation
-    // block-taking API materializes the native block; the holder remains alive
-    // until every MediaRemote callback has completed.
+    // JavaScriptObjC cannot infer object-valued callback signatures that come
+    // only from a private framework. A Foundation block-taking API
+    // materializes those native blocks; the holder remains alive until every
+    // MediaRemote callback has completed. Scalar callbacks must retain their
+    // explicit ABI and are therefore passed directly.
     function materializeNativeBlock(callback) {
       const holder = $.NSPredicate.predicateWithBlock(callback)
       return {
@@ -262,25 +263,18 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
 
           if (request.respondsToSelector(isPlayingSelector)) {
             const isPlayingCallback = ObjC.block(
-              ["void", ["id", "id"]],
+              ["void", ["bool", "id"]],
               function(isPlaying, error) {
                 state.isPlayingCompleted = true
-                state.isPlaying = isNil(error) && !isNil(isPlaying)
-                  ? Boolean(unwrap(isPlaying))
-                  : false
+                state.isPlaying = isNil(error) ? Boolean(isPlaying) : false
               }
             )
-            const isPlayingBridge = materializeNativeBlock(isPlayingCallback)
-            keepAlive.push(
-              isPlayingCallback,
-              isPlayingBridge.holder,
-              isPlayingBridge.block
-            )
+            keepAlive.push(isPlayingCallback)
             $.objc_msgSend(
               request,
               isPlayingSelector,
               requestQueue,
-              isPlayingBridge.block
+              isPlayingCallback
             )
           } else {
             state.isPlayingCompleted = true

@@ -252,6 +252,24 @@ xcrun swiftc -warnings-as-errors -strict-concurrency=complete \
 
 It verifies that unavailable timing remains `nil`, real zero remains `0`, enrichment fills only missing values, and a known duration clamps an out-of-range position. Its multi-session regression matrix also verifies that QQ Music and NetEase Music outrank a browser-owned global session while playing or paused, pause transitions cannot leak browser playback into reporting, empty or disappeared supported-player sessions return control to the browser fallback, and a same-player global state can still correct contradictory player-scoped state without discarding richer metadata.
 
+On macOS 15.4 or later, run the live MediaRemote smoke harness from a logged-in
+GUI session:
+
+```bash
+xcrun swiftc -warnings-as-errors -strict-concurrency=complete \
+  YohakuCompanion/Core/MediaInfoManager/MediaInfo.swift \
+  YohakuCompanion/Core/MediaInfoManager/MediaInfoProvider.swift \
+  YohakuCompanion/Core/MediaInfoManager/JXAMediaInfoProvider.swift \
+  scripts/test_media_remote_runtime.swift \
+  -o /tmp/test_media_remote_runtime
+
+/tmp/test_media_remote_runtime
+```
+
+It performs two complete player-scoped lookups so scalar callback ABI failures,
+subprocess crashes, and incomplete MediaRemote responses fail the smoke test
+instead of being mistaken for an authoritative no-media result.
+
 ## Settings mutations
 
 Integration saves, imports, reset, and erase operations share `SettingsMutationCoordinator`. New mutation paths must use this coordinator so that a stale editor cannot reintroduce data after maintenance completes.
