@@ -44,11 +44,12 @@ xcodebuild \
 
 ## Discord RPC behavior harnesses
 
-The transport harness validates externally observable Discord RPC behavior: fragmented and coalesced frame decoding, little-endian wire framing, handshake and `SET_ACTIVITY` payloads, explicit Presence clearing, IPC path priority, timestamp preservation, Unicode limits, Developer Portal asset identifiers, public HTTPS artwork URLs, credential rejection, and Rich Presence button normalization.
+The transport harness validates externally observable Discord RPC behavior: fragmented and coalesced frame decoding, little-endian wire framing, handshake and `SET_ACTIVITY` payloads, explicit Presence clearing, IPC path priority, media display formatting, timestamp preservation, Unicode limits, Developer Portal asset identifiers, public HTTPS artwork URLs, credential rejection, and Rich Presence button normalization.
 
 ```bash
 xcrun swiftc -warnings-as-errors -strict-concurrency=complete \
   YohakuCompanion/Core/Discord/DiscordButton.swift \
+  YohakuCompanion/Core/Discord/DiscordPresenceText.swift \
   YohakuCompanion/Core/Discord/DiscordRPCProtocol.swift \
   YohakuCompanion/Core/Discord/DiscordTransportContract.swift \
   scripts/test_discord_transport_contract.swift \

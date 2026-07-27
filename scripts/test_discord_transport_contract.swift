@@ -22,6 +22,7 @@ private struct DiscordTransportContractHarness {
         try verifyRPCPayloads()
         try verifyRPCResponses()
         try verifyIPCPathPriority()
+        try verifyMediaPresenceText()
 
         try expectText("遥", equals: nil, caseName: "single CJK activity character")
         try expectText("X", equals: nil, caseName: "single ASCII activity character")
@@ -113,6 +114,37 @@ private struct DiscordTransportContractHarness {
         try verifyArtworkRetentionAcrossProgressUpdates()
 
         print("Discord transport contract behavior passed")
+    }
+
+    private static func verifyMediaPresenceText() throws {
+        try expectPresenceText(
+            title: "海绵宝宝",
+            artist: "回音哥",
+            identity: "海绵宝宝 - 回音哥",
+            status: "正在听：海绵宝宝 - 回音哥",
+            caseName: "media title and artist"
+        )
+        try expectPresenceText(
+            title: "Instrumental",
+            artist: nil,
+            identity: "Instrumental",
+            status: "正在听：Instrumental",
+            caseName: "media title without artist"
+        )
+        try expectPresenceText(
+            title: "  Track  ",
+            artist: "   ",
+            identity: "Track",
+            status: "正在听：Track",
+            caseName: "whitespace-only media artist"
+        )
+        try expectPresenceText(
+            title: "   ",
+            artist: "Artist",
+            identity: nil,
+            status: nil,
+            caseName: "missing media title"
+        )
     }
 
     private static func verifyRPCFrameStreaming() throws {
@@ -381,6 +413,30 @@ private struct DiscordTransportContractHarness {
         let actual = DiscordTransportContract.text(input)
         guard actual == expected else {
             throw HarnessFailure.unexpectedValue(caseName: caseName, actual: actual)
+        }
+    }
+
+    private static func expectPresenceText(
+        title: String?,
+        artist: String?,
+        identity expectedIdentity: String?,
+        status expectedStatus: String?,
+        caseName: String
+    ) throws {
+        let actualIdentity = DiscordPresenceText.mediaIdentity(title: title, artist: artist)
+        guard actualIdentity == expectedIdentity else {
+            throw HarnessFailure.unexpectedValue(
+                caseName: "\(caseName) identity",
+                actual: actualIdentity
+            )
+        }
+
+        let actualStatus = DiscordPresenceText.listeningStatus(title: title, artist: artist)
+        guard actualStatus == expectedStatus else {
+            throw HarnessFailure.unexpectedValue(
+                caseName: "\(caseName) status",
+                actual: actualStatus
+            )
         }
     }
 

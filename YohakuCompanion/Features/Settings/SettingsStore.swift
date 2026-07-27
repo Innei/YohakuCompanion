@@ -1059,10 +1059,16 @@ final class SettingsStore: ObservableObject {
         let activityType: DiscordActivityType?
         let statusDisplayType: DiscordStatusDisplayType?
         if showsMedia {
-            details = preview.mediaTitle
-            state = preview.mediaArtist
+            details = DiscordPresenceText.mediaIdentity(
+                title: preview.mediaTitle,
+                artist: preview.mediaArtist
+            )
+            state = DiscordPresenceText.listeningStatus(
+                title: preview.mediaTitle,
+                artist: preview.mediaArtist
+            )
             activityType = integration.useListeningForMedia ? .listening : nil
-            statusDisplayType = integration.useListeningForMedia ? .details : nil
+            statusDisplayType = .state
         } else if integration.showProcessInfo, hasApplication {
             details = preview.applicationName.map { "正在使用 \($0)" }
             state = preview.windowTitle

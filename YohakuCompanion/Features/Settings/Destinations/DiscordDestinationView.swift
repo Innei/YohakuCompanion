@@ -91,8 +91,20 @@ struct DiscordDestinationView: View {
                 || !hasApplication)
         if showsMedia {
             return [
-                ("Details", preview.mediaTitle ?? "—"),
-                ("State", preview.mediaArtist ?? "—"),
+                (
+                    "Details",
+                    DiscordPresenceText.mediaIdentity(
+                        title: preview.mediaTitle,
+                        artist: preview.mediaArtist
+                    ) ?? "—"
+                ),
+                (
+                    "State",
+                    DiscordPresenceText.listeningStatus(
+                        title: preview.mediaTitle,
+                        artist: preview.mediaArtist
+                    ) ?? "—"
+                ),
                 ("Type", store.discordDraft.useListeningForMedia ? "Listening" : "Playing"),
                 ("Media App", preview.mediaApplicationName ?? "—"),
                 ("Timestamp", store.discordDraft.showTimestamps ? "Enabled" : "Hidden"),

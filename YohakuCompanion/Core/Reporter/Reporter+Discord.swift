@@ -173,11 +173,17 @@ class DiscordReporterExtension: ReporterExtension {
         if showMedia {
             let mediaPlayerName = Self.mediaPlayerDisplayName(for: data.mediaProcessName)
             presence.name = mediaPlayerName
-            presence.details = data.mediaName
-            presence.state = data.artist
+            presence.details = DiscordPresenceText.mediaIdentity(
+                title: data.mediaName,
+                artist: data.artist
+            )
+            presence.state = DiscordPresenceText.listeningStatus(
+                title: data.mediaName,
+                artist: data.artist
+            )
+            presence.statusDisplayType = .state
             if cfg.useListeningForMedia {
                 presence.activityType = .listening
-                presence.statusDisplayType = .details
             }
 
             if cfg.showTimestamps,
