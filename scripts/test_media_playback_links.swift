@@ -28,7 +28,8 @@ private struct MediaPlaybackLinksHarness {
         try writeNetEaseMusicFixture(to: temporaryHome)
 
         let songDetailsData = try makeQQMusicSongDetailsFixture()
-        let artworkRecorder = ArtworkURLRecorder()
+        let qqMusicArtworkRecorder = ArtworkURLRecorder()
+        let netEaseMusicArtworkRecorder = ArtworkURLRecorder()
         let expectedArtworkData = Data([0x89, 0x50, 0x4E, 0x47])
         let resolver = CompanionMediaPlaybackLinkResolver(
             homeDirectory: temporaryHome,
@@ -38,18 +39,37 @@ private struct MediaPlaybackLinksHarness {
                     requestedSongMIDs: songMIDs
                 )
             },
+            qqMusicArtworkLoader: { url in
+                await qqMusicArtworkRecorder.record(url)
+                return expectedArtworkData
+            },
             netEaseMusicArtworkLoader: { url in
-                await artworkRecorder.record(url)
+                await netEaseMusicArtworkRecorder.record(url)
                 return expectedArtworkData
             }
         )
         try await verifiesQQMusicResolution(resolver: resolver)
         try await verifiesQQMusicDatabaseFallback(resolver: resolver)
         try await verifiesQQMusicAutoMixFallback(resolver: resolver)
+        try await verifiesQQMusicArtworkResolution(
+            resolver: resolver,
+            recorder: qqMusicArtworkRecorder,
+            expectedData: expectedArtworkData
+        )
+        try await verifiesQQMusicDatabaseArtworkFallback(
+            resolver: resolver,
+            recorder: qqMusicArtworkRecorder,
+            expectedData: expectedArtworkData
+        )
+        try await verifiesQQMusicAutoMixArtworkFallback(
+            resolver: resolver,
+            recorder: qqMusicArtworkRecorder,
+            expectedData: expectedArtworkData
+        )
         try await verifiesNetEaseMusicResolution(resolver: resolver)
         try await verifiesNetEaseMusicArtworkResolution(
             resolver: resolver,
-            recorder: artworkRecorder,
+            recorder: netEaseMusicArtworkRecorder,
             expectedData: expectedArtworkData
         )
         try verifiesAmbiguousMatchesFailClosed()
@@ -106,6 +126,75 @@ private struct MediaPlaybackLinksHarness {
         try expect(
             url?.absoluteString == "https://y.qq.com/n/ryqq/songDetail/000sxYlY1Oho1M",
             "QQ Music did not resolve a radio track from its AutoMix song MID cache"
+        )
+    }
+
+    private static func verifiesQQMusicArtworkResolution(
+        resolver: CompanionMediaPlaybackLinkResolver,
+        recorder: ArtworkURLRecorder,
+        expectedData: Data
+    ) async throws {
+        let info = makeMediaInfo(
+            title: "Never Let You Down 秋夜独白",
+            artist: "BEAUZ",
+            album: "Never Let You Down 秋夜独白",
+            duration: 160,
+            applicationIdentifier: CompanionMediaPlaybackLinkQuery.qqMusicBundleIdentifier
+        )
+        let data = await resolver.resolveArtworkData(for: info)
+        try expect(data == expectedData, "QQ Music queue artwork data was not returned")
+        let urls = await recorder.urls
+        try expect(
+            urls == [
+                URL(
+                    string: "https://y.gtimg.cn/music/photo_new/T002R512x512M000001TWhCg11XFX5.jpg"
+                )!
+            ],
+            "QQ Music queue artwork did not use the local album MID"
+        )
+    }
+
+    private static func verifiesQQMusicDatabaseArtworkFallback(
+        resolver: CompanionMediaPlaybackLinkResolver,
+        recorder: ArtworkURLRecorder,
+        expectedData: Data
+    ) async throws {
+        let info = makeMediaInfo(
+            title: "眉南边",
+            artist: "银临",
+            album: "离地十公分·A面",
+            duration: 201,
+            applicationIdentifier: CompanionMediaPlaybackLinkQuery.qqMusicBundleIdentifier
+        )
+        let data = await resolver.resolveArtworkData(for: info)
+        try expect(data == expectedData, "QQ Music database artwork data was not returned")
+        let urls = await recorder.urls
+        try expect(
+            urls.last?.absoluteString
+                == "https://y.gtimg.cn/music/photo_new/T002R512x512M000001ABCdef12345.jpg",
+            "QQ Music database artwork did not use its stored album MID"
+        )
+    }
+
+    private static func verifiesQQMusicAutoMixArtworkFallback(
+        resolver: CompanionMediaPlaybackLinkResolver,
+        recorder: ArtworkURLRecorder,
+        expectedData: Data
+    ) async throws {
+        let info = makeMediaInfo(
+            title: "问棋",
+            artist: "扇宝",
+            album: "问棋",
+            duration: 193,
+            applicationIdentifier: CompanionMediaPlaybackLinkQuery.qqMusicBundleIdentifier
+        )
+        let data = await resolver.resolveArtworkData(for: info)
+        try expect(data == expectedData, "QQ Music AutoMix artwork data was not returned")
+        let urls = await recorder.urls
+        try expect(
+            urls.last?.absoluteString
+                == "https://y.gtimg.cn/music/photo_new/T002R512x512M000002ABCdef12345.jpg",
+            "QQ Music AutoMix artwork did not use song-details album metadata"
         )
     }
 
@@ -211,6 +300,19 @@ private struct MediaPlaybackLinksHarness {
             ),
             "a tracking query was accepted on a NetEase Music link"
         )
+        try expect(
+            QQMusicArtworkURLPolicy.url(albumMID: "001TWhCg11XFX5")?.absoluteString
+                == "https://y.gtimg.cn/music/photo_new/T002R512x512M000001TWhCg11XFX5.jpg",
+            "a valid QQ Music album MID did not produce an official artwork URL"
+        )
+        try expect(
+            !QQMusicArtworkURLPolicy.isAllowed(
+                URL(
+                    string: "https://y.gtimg.cn.evil.example/music/photo_new/T002R512x512M000001TWhCg11XFX5.jpg"
+                )!
+            ),
+            "a spoofed QQ Music artwork host was accepted"
+        )
     }
 
     private static func verifiesUnsupportedPlayersRemainUnlinked(
@@ -268,7 +370,8 @@ private struct MediaPlaybackLinksHarness {
                 name: "Never Let You Down 秋夜独白",
                 duration: 160,
                 singers: ["BEAUZ", "Miles Away", "RYYZN", "陈雪凝"],
-                album: "Never Let You Down 秋夜独白"
+                album: "Never Let You Down 秋夜独白",
+                albumMID: "001TWhCg11XFX5"
             ),
             FixtureQQSong(
                 songID: 123,
@@ -276,7 +379,8 @@ private struct MediaPlaybackLinksHarness {
                 name: "Never Let You Down 秋夜独白",
                 duration: 200,
                 singers: ["Someone Else"],
-                album: "Other Album"
+                album: "Other Album",
+                albumMID: "003ABCdef12345"
             ),
         ]
         let archiver = NSKeyedArchiver(requiringSecureCoding: true)
@@ -358,6 +462,7 @@ private struct MediaPlaybackLinksHarness {
                 singer TEXT NOT NULL,
                 album TEXT NOT NULL,
                 K_SONG_RESERVE1 TEXT NOT NULL,
+                K_SONG_RESERVE9 TEXT NOT NULL,
                 K_SONG_RESERVE12 INTEGER NOT NULL
             );
             INSERT INTO SONGS VALUES (
@@ -366,6 +471,7 @@ private struct MediaPlaybackLinksHarness {
                 '银临',
                 '离地十公分·A面',
                 '000hTQrG2IWVPw',
+                '001ABCdef12345',
                 201000
             );
             INSERT INTO SONGS VALUES (
@@ -374,6 +480,7 @@ private struct MediaPlaybackLinksHarness {
                 'Other Artist',
                 'Other Album',
                 '00123456789ABC',
+                '004ABCdef12345',
                 300000
             );
             """
@@ -410,21 +517,21 @@ private struct MediaPlaybackLinksHarness {
                     "name": "问棋",
                     "interval": 193,
                     "singer": [["name": "扇宝"]],
-                    "album": ["name": "问棋"],
+                    "album": ["mid": "002ABCdef12345", "name": "问棋"],
                 ],
                 [
                     "mid": "000m07jK2MRSVg",
                     "name": "Goldfish Song",
                     "interval": 159,
                     "singer": [["name": "Goodmorning Pancake"]],
-                    "album": ["name": "Ah!Chim!"],
+                    "album": ["mid": "005ABCdef12345", "name": "Ah!Chim!"],
                 ],
                 [
                     "mid": "00123456789ABC",
                     "name": "问棋",
                     "interval": 193,
                     "singer": [["name": "扇宝"]],
-                    "album": ["name": "问棋"],
+                    "album": ["mid": "006ABCdef12345", "name": "问棋"],
                 ],
             ],
         ]
@@ -480,14 +587,15 @@ private final class FixtureQQSong: NSObject, NSSecureCoding {
         name: String,
         duration: Int,
         singers: [String],
-        album: String
+        album: String,
+        albumMID: String
     ) {
         self.songID = songID
         self.songMID = songMID
         self.name = name
         self.duration = duration
         self.singers = singers.map(FixtureQQSinger.init(name:))
-        self.album = FixtureQQAlbum(name: album)
+        self.album = FixtureQQAlbum(name: album, albumMID: albumMID)
         super.init()
     }
 
@@ -524,9 +632,11 @@ private final class FixtureQQSinger: NSObject, NSSecureCoding {
 private final class FixtureQQAlbum: NSObject, NSSecureCoding {
     static var supportsSecureCoding: Bool { true }
     let name: String
+    let albumMID: String
 
-    init(name: String) {
+    init(name: String, albumMID: String) {
         self.name = name
+        self.albumMID = albumMID
         super.init()
     }
 
@@ -534,5 +644,6 @@ private final class FixtureQQAlbum: NSObject, NSSecureCoding {
 
     func encode(with coder: NSCoder) {
         coder.encode(name, forKey: "name")
+        coder.encode(albumMID, forKey: "albumMid")
     }
 }

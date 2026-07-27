@@ -138,7 +138,7 @@ class DiscordReporterExtension: ReporterExtension {
         }
     }
 
-    private func ensureInitialized() {
+    private func ensureInitialized() async throws {
         let cfg = PreferencesDataModel.shared.discordIntegration.value
         guard !cfg.applicationId.isEmpty else { return }
 
@@ -149,7 +149,7 @@ class DiscordReporterExtension: ReporterExtension {
             initializedApplicationId = cfg.applicationId
         }
         if !DiscordClientProvider.shared.isConnected {
-            DiscordClientProvider.shared.initialize(applicationId: cfg.applicationId)
+            try await DiscordClientProvider.shared.initialize(applicationId: cfg.applicationId)
         }
     }
 
@@ -334,7 +334,7 @@ class DiscordReporterExtension: ReporterExtension {
         }
     }
 
-    /// Normalize once so the Social SDK call and persisted output receipt are
+    /// Normalize once so the native RPC call and persisted output receipt are
     /// derived from the same final payload.
     private static func transportPresence(_ presence: DiscordPresence) -> DiscordPresence {
         DiscordPresence(
@@ -357,13 +357,12 @@ class DiscordReporterExtension: ReporterExtension {
         outcome: String,
         reason: String? = nil
     ) {
-        let clientKind = DiscordClientProvider.shared is NoopDiscordClient ? "noop" : "sdk"
         let connected = DiscordClientProvider.shared.isConnected
 
         DiscordDebugStore.shared.update { snapshot in
             snapshot.lastOutcome = outcome
             snapshot.lastReason = reason
-            snapshot.clientKind = clientKind
+            snapshot.clientKind = "ipc"
             snapshot.isConnected = connected
         }
     }
@@ -483,10 +482,15 @@ class DiscordReporterExtension: ReporterExtension {
         }
 
         await waitForScheduledActivityClear()
-        ensureInitialized()
+        do {
+            try await ensureInitialized()
+        } catch {
+            let reason = error.localizedDescription
+            recordDebug(outcome: "error", reason: reason)
+            return .failure(.cancelled(message: reason))
+        }
         guard DiscordClientProvider.shared.isConnected else {
-            let reason = DiscordClientProvider.shared is NoopDiscordClient
-                ? "Discord SDK is unavailable" : "Discord client not connected"
+            let reason = "Discord client not connected"
             recordDebug(outcome: "error", reason: reason)
             return .failure(.cancelled(message: reason))
         }
@@ -532,8 +536,8 @@ class DiscordReporterExtension: ReporterExtension {
             )
         } catch {
             if Task.isCancelled {
-                // Some Discord SDK transports complete setActivity even after the
-                // enclosing task is cancelled. Clear again so a stale generation
+                // The update frame may already be in Discord's socket buffer when
+                // the enclosing task is cancelled. Clear again so a stale generation
                 // cannot restore an activity after privacy or lifecycle invalidation.
                 clearReportedState()
                 recordDebug(outcome: "cancelled")

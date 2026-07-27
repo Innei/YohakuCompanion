@@ -525,8 +525,6 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
   }
 
   private func makeCandidate(from dictionary: [String: Any]) -> MediaSessionCandidate? {
-    guard let info = makeMediaInfo(from: dictionary) else { return nil }
-
     let source: MediaSessionSource
     switch nonEmptyString(dictionary["source"]) {
     case "supported":
@@ -534,6 +532,27 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
     case "global":
       source = .globalFallback
     default:
+      return nil
+    }
+
+    let bundleIdentifier = nonEmptyString(dictionary["bundleIdentifier"])
+    let runningApplication = bundleIdentifier.flatMap {
+      NSRunningApplication.runningApplications(withBundleIdentifier: $0).first
+    }
+
+    // Player-scoped MediaRemote records can outlive the application process.
+    // Such stale metadata must not suppress a legitimate browser fallback.
+    if source == .supportedPlayer, runningApplication == nil {
+      return nil
+    }
+
+    guard
+      let info = makeMediaInfo(
+        from: dictionary,
+        bundleIdentifier: bundleIdentifier,
+        runningApplication: runningApplication
+      )
+    else {
       return nil
     }
 
@@ -548,18 +567,17 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
     )
   }
 
-  private func makeMediaInfo(from dictionary: [String: Any]) -> MediaInfo? {
+  private func makeMediaInfo(
+    from dictionary: [String: Any],
+    bundleIdentifier: String?,
+    runningApplication: NSRunningApplication?
+  ) -> MediaInfo? {
     let title = nonEmptyString(dictionary["title"])
     let artist = nonEmptyString(dictionary["artist"])
     let album = nonEmptyString(dictionary["album"])
     let playing = (dictionary["playing"] as? Bool) ?? false
-    let bundleIdentifier = nonEmptyString(dictionary["bundleIdentifier"])
 
     guard title != nil || playing else { return nil }
-
-    let runningApplication = bundleIdentifier.flatMap {
-      NSRunningApplication.runningApplications(withBundleIdentifier: $0).first
-    }
 
     return MediaInfo(
       name: title,

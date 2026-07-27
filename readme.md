@@ -64,7 +64,7 @@ Raw bundle identifiers, executable paths, process IDs, credentials, original art
 - A Yohaku deployment with its Live Desk module enabled.
 - Accessibility permission only when window-title sharing is enabled.
 
-The built-in media provider works without additional software. On macOS 15.4 or later, the optional [media-control](https://github.com/ungive/media-control) helper can enrich process and artwork metadata.
+The built-in media provider works without additional software. On macOS 15.4 or later, Yohaku Companion reads playback state through the system MediaRemote session and enriches supported players from their local application data.
 
 ## Install and pair
 
@@ -106,8 +106,6 @@ Sync History stores a bounded local audit of sanitized Bridge delivery attempts 
 ## Development
 
 ```bash
-bash scripts/setup_discord_sdk.sh /path/to/DiscordSocialSdk-1.9.17379.zip
-
 xcodebuild \
   -project YohakuCompanion.xcodeproj \
   -scheme YohakuCompanion \

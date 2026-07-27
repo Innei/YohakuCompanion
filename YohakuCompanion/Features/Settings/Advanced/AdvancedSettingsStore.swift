@@ -130,8 +130,7 @@ final class AdvancedSettingsStore: ObservableObject {
             buildNumber: buildNumber,
             credentialStorage: credentialStorageStatus,
             databaseStatus: "Ready",
-            mediaProvider: CLIMediaInfoProvider.isMediaControlInstalled()
-                ? "Enhanced helper available" : "Built-in provider",
+            mediaProvider: "Built-in MediaRemote",
             accessibilityGranted: ApplicationMonitor.shared.isAccessibilityEnabled(),
             sharingEnabled: PreferencesDataModel.reportingAllowed,
             enabledDestinationCount: enabledDestinationCount,

@@ -20,7 +20,7 @@ enum DiscordActivityType: Int {
 protocol DiscordClient: AnyObject {
     var isConnected: Bool { get }
     var connectionGeneration: UInt64 { get }
-    func initialize(applicationId: String)
+    func initialize(applicationId: String) async throws
     func setActivity(
         name: String?,
         details: String?,
@@ -39,90 +39,57 @@ protocol DiscordClient: AnyObject {
     func shutdown()
 }
 
-final class NoopDiscordClient: DiscordClient {
-    private(set) var isConnected: Bool = false
-    private(set) var connectionGeneration: UInt64 = 0
-
-    func initialize(applicationId: String) {
-        advanceConnectionGeneration()
-        isConnected = false
-        NSLog("[Discord] Discord SDK unavailable; presence was not initialized")
-        DiscordDebugStore.shared.update { snapshot in
-            snapshot.clientKind = "noop"
-            snapshot.isConnected = false
-            snapshot.lastOutcome = "unavailable"
-            snapshot.lastReason = "Discord SDK is unavailable"
-        }
-    }
-
-    func setActivity(
-        name: String?,
-        details: String?,
-        state: String?,
-        activityType: DiscordActivityType?,
-        statusDisplayType: DiscordStatusDisplayType?,
-        startTimestamp: Int64?,
-        endTimestamp: Int64?,
-        largeImageKey: String?,
-        largeImageText: String?,
-        smallImageKey: String?,
-        smallImageText: String?,
-        buttons: [DiscordButton]?
-    ) async throws {
-        throw DiscordClientError.sdkUnavailable
-    }
-
-    func clearActivity() async throws {
-        NSLog("[Discord] Noop clearActivity")
-        DiscordDebugStore.shared.update { snapshot in
-            snapshot.clientKind = "noop"
-            snapshot.lastOutcome = "clearActivity"
-        }
-    }
-
-    func shutdown() {
-        advanceConnectionGeneration()
-        isConnected = false
-        NSLog("[Discord] Noop shutdown")
-        DiscordDebugStore.shared.update { snapshot in
-            snapshot.clientKind = "noop"
-            snapshot.isConnected = false
-            snapshot.lastOutcome = "shutdown"
-        }
-    }
-
-    private func advanceConnectionGeneration() {
-        connectionGeneration &+= 1
-        if connectionGeneration == 0 {
-            connectionGeneration = 1
-        }
-    }
-}
-
-enum DiscordClientError: LocalizedError {
-    case sdkUnavailable
+enum DiscordClientError: LocalizedError, Sendable {
+    case invalidApplicationID
+    case discordNotRunning
     case notConnected
+    case connectionReinitialized
+    case connectionTimedOut
+    case connectionFailed(String)
+    case connectionClosed(String)
+    case protocolViolation(String)
+    case requestRejected(code: Int?, message: String)
+    case requestTimedOut
     case updateAlreadyInProgress
+    case activityUpdateSuperseded
+    case clientShutDown
 
     var errorDescription: String? {
         switch self {
-        case .sdkUnavailable:
-            return "Discord SDK is unavailable"
+        case .invalidApplicationID:
+            return "Discord Application ID must be a positive integer"
+        case .discordNotRunning:
+            return "Discord desktop is not running or its IPC socket is unavailable"
         case .notConnected:
             return "Discord client is not connected"
+        case .connectionReinitialized:
+            return "Discord IPC was reinitialized"
+        case .connectionTimedOut:
+            return "Discord IPC handshake timed out"
+        case .connectionFailed(let reason):
+            return "Discord IPC connection failed: \(reason)"
+        case .connectionClosed(let reason):
+            return reason
+        case .protocolViolation(let reason):
+            return "Discord IPC protocol error: \(reason)"
+        case .requestRejected(let code, let message):
+            if let code {
+                return "Discord rejected the activity request (\(code)): \(message)"
+            }
+            return "Discord rejected the activity request: \(message)"
+        case .requestTimedOut:
+            return "Discord activity request timed out"
         case .updateAlreadyInProgress:
             return "A Discord activity update is already in progress"
+        case .activityUpdateSuperseded:
+            return "Discord activity update was superseded by a clear"
+        case .clientShutDown:
+            return "Discord IPC client was shut down"
         }
     }
 }
 
 @MainActor
 enum DiscordClientProvider {
-    static let shared: DiscordClient = {
-        if DiscordSDKBridge.isSDKAvailable() {
-            return DiscordSDKClient()
-        } else {
-            return NoopDiscordClient()
-        }
-    }()
+    static let shared: DiscordClient = DiscordIPCClient()
 }

@@ -10,11 +10,7 @@
 
 ## Build and verification
 
-On a clean checkout, download the C++ Discord Social SDK archive from the
-Developer Portal and run the checksum-pinned installer before Xcode builds:
-
 ```bash
-bash scripts/setup_discord_sdk.sh /path/to/DiscordSocialSdk-1.9.17379.zip
 xcodebuild \
   -project YohakuCompanion.xcodeproj \
   -scheme YohakuCompanion \
@@ -23,6 +19,9 @@ xcodebuild \
   SWIFT_STRICT_CONCURRENCY=complete \
   build
 ```
+
+Discord Rich Presence uses the documented local IPC RPC protocol through
+native Swift and does not require an external SDK archive or dynamic library.
 
 Use behavior-oriented harnesses from `scripts/` for protocol, connection, lifecycle, consent, media-timing, settings-transaction, or Discord changes. Do not add tests that merely snapshot constant tables or internal representation.
 

@@ -1,6 +1,6 @@
-# Discord Rich Presence Integration Design (Official SDK)
+# Discord Rich Presence Integration Design (Historical SDK Reference)
 
-> Status: superseded legacy Game SDK reference. The current implementation uses Discord Social SDK direct Rich Presence through `DiscordSDKBridge`. The historical architecture below is retained only for provenance and must not be used as current setup guidance.
+> Status: superseded SDK reference. The current implementation uses Discord's documented local IPC RPC protocol through native Swift. The historical architecture below is retained only for provenance and must not be used as current setup guidance.
 
 ## Overview
 
@@ -8,7 +8,7 @@ This document outlines the original implementation design for the optional Disco
 
 **Historical Approach**: Official Discord Game SDK with a C++/Objective-C++ bridge to Swift.
 
-Current Social SDK asset fields accept either Developer Portal asset identifiers or public external image URLs. Yohaku Companion restricts configured external images to HTTPS and continues to treat the document below as historical Game SDK behavior.
+Current Discord Activity asset fields accept either Developer Portal asset identifiers or public external image URLs. Yohaku Companion restricts configured external images to HTTPS and continues to treat the document below as historical Game SDK behavior.
 
 ## Architectural Analysis
 

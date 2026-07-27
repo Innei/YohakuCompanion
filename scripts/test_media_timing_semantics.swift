@@ -219,8 +219,31 @@ private struct MediaTimingSemanticsHarness {
       "a paused global session masked a supported player that was playing"
     )
 
-    var browserTakeoverState = MediaSessionSelectionState()
-    let browserPlayingAfterQQMusicPaused = browserTakeoverState.select(
+    var neteaseOverPausedBrowserState = MediaSessionSelectionState()
+    let neteaseOverPausedBrowser = neteaseOverPausedBrowserState.select(
+      from: [
+        candidate(
+          applicationIdentifier: neteaseMusic,
+          source: .supportedPlayer,
+          playing: true,
+          activityDate: Date(timeIntervalSince1970: 900)
+        ),
+        candidate(
+          applicationIdentifier: chrome,
+          source: .globalFallback,
+          playing: false,
+          activityDate: Date(timeIntervalSince1970: 990)
+        ),
+      ],
+      observedAt: observedAt
+    )
+    try expect(
+      neteaseOverPausedBrowser?.applicationIdentifier == neteaseMusic,
+      "a paused global session masked NetEase Music while it was playing"
+    )
+
+    var qqMusicPriorityState = MediaSessionSelectionState()
+    let pausedQQMusicOverPlayingBrowser = qqMusicPriorityState.select(
       from: [
         candidate(
           applicationIdentifier: qqMusic,
@@ -238,11 +261,42 @@ private struct MediaTimingSemanticsHarness {
       observedAt: observedAt
     )
     try expect(
-      browserPlayingAfterQQMusicPaused?.applicationIdentifier == chrome,
-      "a paused supported player masked the active browser session"
+      pausedQQMusicOverPlayingBrowser?.applicationIdentifier == qqMusic,
+      "a playing browser masked the paused QQ Music session"
+    )
+    try expect(
+      pausedQQMusicOverPlayingBrowser?.playing == false,
+      "QQ Music pause state was replaced by the browser playing state"
     )
 
-    let allSessionsPaused = browserTakeoverState.select(
+    var neteasePriorityState = MediaSessionSelectionState()
+    let pausedNetEaseOverPlayingBrowser = neteasePriorityState.select(
+      from: [
+        candidate(
+          applicationIdentifier: neteaseMusic,
+          source: .supportedPlayer,
+          playing: false,
+          activityDate: Date(timeIntervalSince1970: 900)
+        ),
+        candidate(
+          applicationIdentifier: chrome,
+          source: .globalFallback,
+          playing: true,
+          activityDate: Date(timeIntervalSince1970: 990)
+        ),
+      ],
+      observedAt: observedAt
+    )
+    try expect(
+      pausedNetEaseOverPlayingBrowser?.applicationIdentifier == neteaseMusic,
+      "a playing browser masked the paused NetEase Music session"
+    )
+    try expect(
+      pausedNetEaseOverPlayingBrowser?.playing == false,
+      "NetEase Music pause state was replaced by the browser playing state"
+    )
+
+    let allSessionsPaused = qqMusicPriorityState.select(
       from: [
         candidate(
           applicationIdentifier: qqMusic,
@@ -262,6 +316,108 @@ private struct MediaTimingSemanticsHarness {
     try expect(
       allSessionsPaused?.playing == false,
       "concurrent sessions retained a stale playing state after both paused"
+    )
+
+    var transitionState = MediaSessionSelectionState()
+    let browserBeforeSupportedPlayerAppears = transitionState.select(
+      from: [
+        candidate(
+          applicationIdentifier: chrome,
+          source: .globalFallback,
+          playing: true,
+          activityDate: Date(timeIntervalSince1970: 900)
+        )
+      ],
+      observedAt: observedAt
+    )
+    try expect(
+      browserBeforeSupportedPlayerAppears?.applicationIdentifier == chrome,
+      "the browser fallback was not selected before a supported session appeared"
+    )
+
+    let qqMusicTakesPriority = transitionState.select(
+      from: [
+        candidate(
+          applicationIdentifier: qqMusic,
+          source: .supportedPlayer,
+          playing: true,
+          activityDate: Date(timeIntervalSince1970: 1_005)
+        ),
+        candidate(
+          applicationIdentifier: chrome,
+          source: .globalFallback,
+          playing: true,
+          activityDate: Date(timeIntervalSince1970: 900)
+        ),
+      ],
+      observedAt: Date(timeIntervalSince1970: 1_010)
+    )
+    try expect(
+      qqMusicTakesPriority?.applicationIdentifier == qqMusic
+        && qqMusicTakesPriority?.playing == true,
+      "QQ Music did not take priority over an already-playing browser"
+    )
+
+    let qqMusicSurvivesBrowserPause = transitionState.select(
+      from: [
+        candidate(
+          applicationIdentifier: qqMusic,
+          source: .supportedPlayer,
+          playing: true,
+          activityDate: Date(timeIntervalSince1970: 1_005)
+        ),
+        candidate(
+          applicationIdentifier: chrome,
+          source: .globalFallback,
+          playing: false,
+          activityDate: Date(timeIntervalSince1970: 1_015)
+        ),
+      ],
+      observedAt: Date(timeIntervalSince1970: 1_016)
+    )
+    try expect(
+      qqMusicSurvivesBrowserPause?.applicationIdentifier == qqMusic
+        && qqMusicSurvivesBrowserPause?.playing == true,
+      "pausing the browser hid QQ Music while it continued playing"
+    )
+
+    let qqMusicPauseIsRetained = transitionState.select(
+      from: [
+        candidate(
+          applicationIdentifier: qqMusic,
+          source: .supportedPlayer,
+          playing: false,
+          activityDate: Date(timeIntervalSince1970: 1_005)
+        ),
+        candidate(
+          applicationIdentifier: chrome,
+          source: .globalFallback,
+          playing: true,
+          activityDate: Date(timeIntervalSince1970: 900)
+        ),
+      ],
+      observedAt: Date(timeIntervalSince1970: 1_020)
+    )
+    try expect(
+      qqMusicPauseIsRetained?.applicationIdentifier == qqMusic
+        && qqMusicPauseIsRetained?.playing == false,
+      "QQ Music pause transitioned reporting back to the browser"
+    )
+
+    let browserAfterSupportedSessionDisappears = transitionState.select(
+      from: [
+        candidate(
+          applicationIdentifier: chrome,
+          source: .globalFallback,
+          playing: true,
+          activityDate: Date(timeIntervalSince1970: 900)
+        )
+      ],
+      observedAt: Date(timeIntervalSince1970: 1_030)
+    )
+    try expect(
+      browserAfterSupportedSessionDisappears?.applicationIdentifier == chrome,
+      "the browser fallback did not recover after the supported session disappeared"
     )
 
     var conflictingQQMusicState = MediaSessionSelectionState()
@@ -327,6 +483,22 @@ private struct MediaTimingSemanticsHarness {
     try expect(
       emptySessionState.select(from: [emptySession], observedAt: observedAt) == nil,
       "an opened player without media became the selected session"
+    )
+    let browserBesideEmptySupportedSession = emptySessionState.select(
+      from: [
+        emptySession,
+        candidate(
+          applicationIdentifier: chrome,
+          source: .globalFallback,
+          playing: true,
+          activityDate: Date(timeIntervalSince1970: 990)
+        ),
+      ],
+      observedAt: observedAt
+    )
+    try expect(
+      browserBesideEmptySupportedSession?.applicationIdentifier == chrome,
+      "an empty supported-player session suppressed the browser fallback"
     )
 
     var simultaneousState = MediaSessionSelectionState()

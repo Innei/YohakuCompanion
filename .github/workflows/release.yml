@@ -135,9 +135,6 @@ jobs:
           xcodebuild -version
           swift --version
 
-      - name: Prepare arm64 Discord SDK
-        run: bash scripts/setup_discord_sdk.sh
-
       - name: Select distribution mode
         id: distribution
         env:
@@ -307,7 +304,6 @@ jobs:
           set -euo pipefail
           : "${SPARKLE_PUBLIC_ED_KEY:?Missing SPARKLE_PUBLIC_ED_KEY}"
           APP_PATH="$EXPORT_PATH/YohakuCompanion.app"
-          DISCORD_BINARY="$APP_PATH/Contents/Frameworks/discord_game_sdk.dylib"
           SPARKLE_FRAMEWORK="$APP_PATH/Contents/Frameworks/Sparkle.framework"
           SPARKLE_VERSION="$SPARKLE_FRAMEWORK/Versions/Current"
           SPARKLE_BINARY="$SPARKLE_VERSION/Sparkle"
@@ -342,10 +338,10 @@ jobs:
           }
 
           test -d "$APP_PATH"
-          test -f "$DISCORD_BINARY"
+          test ! -e "$APP_PATH/Contents/Frameworks/discord_game_sdk.dylib"
+          test ! -e "$APP_PATH/Contents/Frameworks/libdiscord_partner_sdk.dylib"
           for BINARY in \
             "$APP_PATH/Contents/MacOS/YohakuCompanion" \
-            "$DISCORD_BINARY" \
             "$SPARKLE_BINARY" \
             "$AUTOUPDATE_BINARY" \
             "$UPDATER_BINARY" \
@@ -359,7 +355,6 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
           for CODE_PATH in \
             "$APP_PATH" \
-            "$DISCORD_BINARY" \
             "$SPARKLE_FRAMEWORK" \
             "$AUTOUPDATE_BINARY" \
             "$UPDATER_APP" \

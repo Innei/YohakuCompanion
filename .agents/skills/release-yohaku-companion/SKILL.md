@@ -90,14 +90,13 @@ Derive statements from the committed diff since the relevant previous release. P
 Run the repository's focused checks, at minimum:
 
 ```bash
-rtk proxy bash scripts/setup_discord_sdk.sh
 rtk proxy xcodebuild -project YohakuCompanion.xcodeproj -scheme YohakuCompanion -configuration Debug -destination 'generic/platform=macOS' build
 rtk proxy xcodebuild -project YohakuCompanion.xcodeproj -scheme YohakuCompanion -configuration Release -destination 'generic/platform=macOS' ARCHS=arm64 ONLY_ACTIVE_ARCH=NO build
 rtk git diff --check
 rtk proxy plutil -lint YohakuCompanion/Info.plist ExportOptions.plist
 ```
 
-Also run strict-concurrency and static-analysis checks when the release changes Swift runtime or data-flow code. The workflow runs `scripts/prepare_arm64_app.sh` after export because Sparkle's macOS binary framework contains multiple architecture slices even when the app target builds for arm64. Verify that Sparkle resolves to the reviewed version, every shipped executable and the Discord dylib are arm64-only after that preparation step, release notes are non-empty, and tag/project versions match.
+Also run strict-concurrency and static-analysis checks when the release changes Swift runtime or data-flow code. The workflow runs `scripts/prepare_arm64_app.sh` after export because Sparkle's macOS binary framework contains multiple architecture slices even when the app target builds for arm64. Verify that Sparkle resolves to the reviewed version, every shipped executable is arm64-only after that preparation step, no legacy Discord SDK dynamic library is present, release notes are non-empty, and tag/project versions match.
 
 ### 5. Commit, tag, and atomically push
 

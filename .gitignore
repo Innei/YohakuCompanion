@@ -19,6 +19,5 @@ dist/
 *.pem
 *.key
 
-# Discord's proprietary Social SDK is installed from a checksum-verified
-# Developer Portal archive by scripts/setup_discord_sdk.sh.
+# Local vendor artifacts are not build inputs and must not enter releases.
 Vendor/Discord

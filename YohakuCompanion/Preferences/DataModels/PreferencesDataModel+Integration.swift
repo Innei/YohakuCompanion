@@ -784,7 +784,7 @@ struct DiscordIntegration: UserDefaultsJSONStorable, DictionaryConvertible {
     var useListeningForMedia: Bool = true
     var showTimestamps: Bool = true
 
-    // Social SDK accepts Developer Portal asset keys or public HTTPS image URLs.
+    // Discord RPC accepts Developer Portal asset keys or public HTTPS image URLs.
     var customLargeImageKey: String = ""
     var customLargeImageText: String = ""
     var brandSmallImageKey: String = ""

@@ -15,14 +15,11 @@ public final class MediaInfoManager: NSObject {
 
   private static let provider: any MediaInfoProvider = {
     if #available(macOS 15.4, *) {
-      let jxaProvider = JXAMediaInfoProvider()
-      guard CLIMediaInfoProvider.isMediaControlInstalled() else {
-        return jxaProvider
-      }
-      return AdaptiveMediaInfoProvider(
-        enrichmentProvider: CLIMediaInfoProvider(),
-        authoritativeProvider: jxaProvider
-      )
+      // Keep playback state on the built-in MediaRemote path. Player-specific
+      // metadata enrichment is resolved from each supported application's local
+      // state after capture, so runtime behavior does not depend on an optional
+      // third-party executable.
+      return JXAMediaInfoProvider()
     } else {
       return LegacyMediaInfoProvider()
     }

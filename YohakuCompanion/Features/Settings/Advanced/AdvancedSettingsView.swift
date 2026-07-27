@@ -162,7 +162,7 @@ struct AdvancedSettingsView: View {
                 SettingsDivider()
                 AdvancedValueRow(
                     title: "Media Provider",
-                    value: store.mediaHelperInstalled ? "Enhanced" : "Built-in"
+                    value: "Built-in MediaRemote"
                 )
                 SettingsDivider()
                 VStack(alignment: .leading, spacing: 5) {

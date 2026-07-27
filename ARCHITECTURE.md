@@ -132,7 +132,7 @@ sequenceDiagram
 
 The generation is checked before and after asset resolution, each destination await, and persistence. `DataStore.saveReport` also checks task cancellation before insertion and before save. If a generation becomes stale immediately after save, its UUID is durably quarantined from History before physical deletion. Failed deletion remains suppressed and is retried on the next launch.
 
-Slack has a serialized delivery queue. Reporting operations can be cancelled without cancelling a required remote clear operation, and Alamofire requests receive task cancellation. Remote clears use bounded retries, retry again after network recovery, and are awaited within the application termination deadline. Discord clears again after a cancelled late SDK completion so an obsolete activity cannot reappear.
+Slack has a serialized delivery queue. Reporting operations can be cancelled without cancelling a required remote clear operation, and Alamofire requests receive task cancellation. Remote clears use bounded retries, retry again after network recovery, and are awaited within the application termination deadline. Discord sends an ordered native IPC clear after a cancelled update so an obsolete activity cannot reappear.
 
 When the network is unavailable, Reporter publishes only the sanitized local presentation and records a single “fresh capture required” marker. It does not enqueue or retain a report for replay. Recovery captures current application and media state and executes the complete generation and privacy pipeline again.
 
@@ -147,7 +147,7 @@ Live presentation uses `PresenceDestinationDeliveryResult` and a separate `Prese
 - Per-destination sending, success, failure, and skipped state.
 - Independent asset degradation.
 
-S3 is represented by `S3AssetHostingService`. It resolves a cached public URL or performs an on-demand upload only when a registered destination or an explicitly enabled Live Desk session can consume a public application-icon URL. Live Desk receives only a URL whose HTTPS host matches the active asset-hosting configuration; the local application identifier and PNG candidate never enter the sanitized snapshot. Failed uploads add only the local application identifier and privacy-sanitized display name to a durable retry queue; credentials and icon data are never persisted there. Maintenance can retry that queue or rebuild current cache records from installed application icons. Discord does not depend on S3: Social SDK images use either a Developer Portal asset key or an explicitly configured public HTTPS URL.
+S3 is represented by `S3AssetHostingService`. It resolves a cached public URL or performs an on-demand upload only when a registered destination or an explicitly enabled Live Desk session can consume a public application-icon URL. Live Desk receives only a URL whose HTTPS host matches the active asset-hosting configuration; the local application identifier and PNG candidate never enter the sanitized snapshot. Failed uploads add only the local application identifier and privacy-sanitized display name to a durable retry queue; credentials and icon data are never persisted there. Maintenance can retry that queue or rebuild current cache records from installed application icons. Discord Rich Presence uses the documented local IPC RPC protocol; its image fields accept either a Developer Portal asset key or an explicitly configured public HTTPS URL.
 
 ## Sync Event Persistence
 

@@ -11,28 +11,10 @@
 		1F1B30112DA3CAAE003F298D /* Alamofire in Frameworks */ = {isa = PBXBuildFile; productRef = 1F1B30102DA3CAAE003F298D /* Alamofire */; };
 		1FD8C8D62DA27E59009F6BCB /* SnapKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1FD8C8D52DA27E59009F6BCB /* SnapKit */; };
 		5A0000012F10000000000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = 5A0000032F10000000000001 /* Sparkle */; };
-		DCD0000A2E0A100000000001 /* libdiscord_partner_sdk.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = DCD000092E0A100000000001 /* libdiscord_partner_sdk.dylib */; };
-		DCD0000B2E0A100000000001 /* libdiscord_partner_sdk.dylib in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = DCD000092E0A100000000001 /* libdiscord_partner_sdk.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 /* End PBXBuildFile section */
-
-/* Begin PBXCopyFilesBuildPhase section */
-		DCD0000C2E0A100000000001 /* Embed Frameworks */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 10;
-			files = (
-				DCD0000B2E0A100000000001 /* libdiscord_partner_sdk.dylib in Embed Frameworks */,
-			);
-			name = "Embed Frameworks";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		1FD8C8BD2DA258F3009F6BCB /* YohakuCompanion_DEV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = YohakuCompanion_DEV.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		DCD000062E0A100000000001 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
-		DCD000092E0A100000000001 /* libdiscord_partner_sdk.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libdiscord_partner_sdk.dylib; path = Vendor/Discord/lib/libdiscord_partner_sdk.dylib; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -65,7 +47,6 @@
 				1F1B2FF52DA3B3AB003F298D /* RxCocoa in Frameworks */,
 				1FD8C8D62DA27E59009F6BCB /* SnapKit in Frameworks */,
 				5A0000012F10000000000001 /* Sparkle in Frameworks */,
-				DCD0000A2E0A100000000001 /* libdiscord_partner_sdk.dylib in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -75,7 +56,6 @@
 		1FD8C8B42DA258F3009F6BCB = {
 			isa = PBXGroup;
 			children = (
-				DCD000082E0A100000000001 /* Vendor */,
 				1FD8C8BF2DA258F3009F6BCB /* YohakuCompanion */,
 				1FD8C8BE2DA258F3009F6BCB /* Products */,
 			);
@@ -89,40 +69,6 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
-		DCD000042E0A100000000001 /* include */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = include;
-			sourceTree = "<group>";
-		};
-		DCD000052E0A100000000001 /* lib */ = {
-			isa = PBXGroup;
-			children = (
-				DCD000092E0A100000000001 /* libdiscord_partner_sdk.dylib */,
-			);
-			path = lib;
-			sourceTree = "<group>";
-		};
-		DCD000072E0A100000000001 /* Discord */ = {
-			isa = PBXGroup;
-			children = (
-				DCD000062E0A100000000001 /* README.md */,
-				DCD000052E0A100000000001 /* lib */,
-				DCD000042E0A100000000001 /* include */,
-			);
-			name = Discord;
-			path = Vendor/Discord;
-			sourceTree = SOURCE_ROOT;
-		};
-		DCD000082E0A100000000001 /* Vendor */ = {
-			isa = PBXGroup;
-			children = (
-				DCD000072E0A100000000001 /* Discord */,
-			);
-			name = Vendor;
-			sourceTree = "<group>";
-		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -133,7 +79,6 @@
 				1FD8C8B92DA258F3009F6BCB /* Sources */,
 				1FD8C8BA2DA258F3009F6BCB /* Frameworks */,
 				1FD8C8BB2DA258F3009F6BCB /* Resources */,
-				DCD0000C2E0A100000000001 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -347,11 +292,6 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				EXECUTABLE_NAME = YohakuCompanion;
 				GENERATE_INFOPLIST_FILE = YES;
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/Vendor/Discord/include",
-					"$(PROJECT_DIR)/Vendor/Discord",
-				);
 				INFOPLIST_FILE = YohakuCompanion/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Yohaku Companion";
 				INFOPLIST_KEY_CFBundleName = "Yohaku Companion";
@@ -363,24 +303,14 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				LIBRARY_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/Vendor/Discord/lib",
-				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.8.3;
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					"-lc++",
-					"-lc++abi",
-				);
 				PRODUCT_BUNDLE_IDENTIFIER = dev.innei.YohakuCompanion.debug;
 				PRODUCT_MODULE_NAME = YohakuCompanion;
 				PRODUCT_NAME = YohakuCompanion_DEV;
 				SPARKLE_FEED_URL = "https://github.com/innei/YohakuCompanion/releases/latest/download/appcast.xml";
 				SPARKLE_PUBLIC_ED_KEY = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "YohakuCompanion/YohakuCompanion-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_INFER_SENDABLE_FROM_CAPTURES = YES;
 				SWIFT_VERSION = 5.0;
 			};
@@ -399,11 +329,6 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				EXECUTABLE_NAME = YohakuCompanion;
 				GENERATE_INFOPLIST_FILE = YES;
-				HEADER_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/Vendor/Discord/include",
-					"$(PROJECT_DIR)/Vendor/Discord",
-				);
 				INFOPLIST_FILE = YohakuCompanion/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Yohaku Companion";
 				INFOPLIST_KEY_CFBundleName = "Yohaku Companion";
@@ -415,24 +340,14 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				LIBRARY_SEARCH_PATHS = (
-					"$(inherited)",
-					"$(PROJECT_DIR)/Vendor/Discord/lib",
-				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
 				MARKETING_VERSION = 1.8.3;
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					"-lc++",
-					"-lc++abi",
-				);
 				PRODUCT_BUNDLE_IDENTIFIER = dev.innei.YohakuCompanion;
 				PRODUCT_MODULE_NAME = YohakuCompanion;
 				PRODUCT_NAME = YohakuCompanion;
 				SPARKLE_FEED_URL = "https://github.com/innei/YohakuCompanion/releases/latest/download/appcast.xml";
 				SPARKLE_PUBLIC_ED_KEY = "";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "YohakuCompanion/YohakuCompanion-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_INFER_SENDABLE_FROM_CAPTURES = YES;
 				SWIFT_VERSION = 5.0;
 			};

@@ -127,10 +127,13 @@ struct MediaSessionCandidate: Sendable {
 
 /// Stateful, deterministic arbitration for concurrent media sessions.
 ///
-/// Ranking is lexicographic: playing state, explicit application preference,
-/// dedicated-adapter source, most recent transition to playing, previous
-/// winner, then a stable identifier. The state preserves the observed start
-/// time while a player changes tracks, so metadata updates do not steal focus.
+/// A meaningful supported-player session always outranks the global fallback.
+/// This prevents a browser-owned global session from hiding QQ Music or
+/// NetEase Music, including when the supported player has just paused. Within
+/// the same source tier, ranking is lexicographic: playing state, explicit
+/// application preference, most recent transition to playing, previous winner,
+/// then a stable identifier. The state preserves the observed start time while
+/// a player changes tracks, so metadata updates do not steal focus.
 struct MediaSessionSelectionState: Sendable {
   private struct Observation: Sendable {
     let isPlaying: Bool
@@ -293,6 +296,10 @@ struct MediaSessionSelectionState: Sendable {
     _ rhs: RankedCandidate,
     previousWinner: String?
   ) -> Bool {
+    if lhs.candidate.source != rhs.candidate.source {
+      return lhs.candidate.source.rawValue > rhs.candidate.source.rawValue
+    }
+
     if lhs.candidate.info.playing != rhs.candidate.info.playing {
       return lhs.candidate.info.playing
     }
@@ -305,10 +312,6 @@ struct MediaSessionSelectionState: Sendable {
     ] ?? Int.max
     if lhsPreferredRank != rhsPreferredRank {
       return lhsPreferredRank < rhsPreferredRank
-    }
-
-    if lhs.candidate.source != rhs.candidate.source {
-      return lhs.candidate.source.rawValue > rhs.candidate.source.rawValue
     }
 
     if lhs.lastStartedAt != rhs.lastStartedAt {

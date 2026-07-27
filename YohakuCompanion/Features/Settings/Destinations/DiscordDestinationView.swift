@@ -75,7 +75,7 @@ struct DiscordDestinationView: View {
                         .textFieldStyle(.roundedBorder)
                 }
             }
-            Text("Images may use an asset key from this Discord application or a public HTTPS URL. Testing publishes the Social SDK fields from this draft, temporarily replaces the current Rich Presence, then clears it; it does not save.")
+            Text("Images may use an asset key from this Discord application or a public HTTPS URL. Testing publishes the native Discord RPC fields from this draft, temporarily replaces the current Rich Presence, then clears it; it does not save.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

@@ -13,6 +13,7 @@ extension CompanionMediaPlaybackLinkResolving {
 }
 
 typealias QQMusicSongDetailsLoader = @Sendable ([String]) async -> [MediaPlaybackQueueTrack]
+typealias QQMusicArtworkLoader = @Sendable (URL) async -> Data?
 typealias NetEaseMusicArtworkLoader = @Sendable (URL) async -> Data?
 
 actor CompanionMediaPlaybackLinkResolver: CompanionMediaPlaybackLinkResolving {
@@ -27,6 +28,7 @@ actor CompanionMediaPlaybackLinkResolver: CompanionMediaPlaybackLinkResolving {
     private let homeDirectory: URL
     private let cacheLifetime: TimeInterval
     private let qqMusicSongDetailsLoader: QQMusicSongDetailsLoader
+    private let qqMusicArtworkLoader: QQMusicArtworkLoader
     private let netEaseMusicArtworkLoader: NetEaseMusicArtworkLoader
     private var cachedResolution: CachedResolution?
 
@@ -36,6 +38,9 @@ actor CompanionMediaPlaybackLinkResolver: CompanionMediaPlaybackLinkResolving {
         qqMusicSongDetailsLoader: @escaping QQMusicSongDetailsLoader = {
             await QQMusicSongDetails.fetch(songMIDs: $0)
         },
+        qqMusicArtworkLoader: @escaping QQMusicArtworkLoader = {
+            await QQMusicArtworkDownloader.fetch(from: $0)
+        },
         netEaseMusicArtworkLoader: @escaping NetEaseMusicArtworkLoader = {
             await NetEaseMusicArtworkDownloader.fetch(from: $0)
         }
@@ -43,6 +48,7 @@ actor CompanionMediaPlaybackLinkResolver: CompanionMediaPlaybackLinkResolving {
         self.homeDirectory = homeDirectory
         self.cacheLifetime = max(0, cacheLifetime)
         self.qqMusicSongDetailsLoader = qqMusicSongDetailsLoader
+        self.qqMusicArtworkLoader = qqMusicArtworkLoader
         self.netEaseMusicArtworkLoader = netEaseMusicArtworkLoader
     }
 
@@ -77,29 +83,47 @@ actor CompanionMediaPlaybackLinkResolver: CompanionMediaPlaybackLinkResolving {
     }
 
     func resolveArtworkData(for mediaInfo: MediaInfo) async -> Data? {
-        guard let query = CompanionMediaPlaybackLinkQuery(mediaInfo: mediaInfo),
-              query.applicationIdentifier
-                == CompanionMediaPlaybackLinkQuery.netEaseMusicBundleIdentifier
-        else {
+        guard let query = CompanionMediaPlaybackLinkQuery(mediaInfo: mediaInfo) else {
             return nil
         }
 
         let homeDirectory = homeDirectory
+        let qqMusicSongDetailsLoader = qqMusicSongDetailsLoader
         let task = Task.detached(priority: .utility) {
-            let url = NetEaseMusicPlaybackQueue.playingListURL(
-                homeDirectory: homeDirectory
-            )
-            guard let data = try? Data(contentsOf: url, options: [.mappedIfSafe]) else {
-                return nil as URL?
+            switch query.applicationIdentifier {
+            case CompanionMediaPlaybackLinkQuery.qqMusicBundleIdentifier:
+                return await Self.resolveQQMusicTrack(
+                    query: query,
+                    homeDirectory: homeDirectory,
+                    qqMusicSongDetailsLoader: qqMusicSongDetailsLoader
+                )?.artworkURL
+
+            case CompanionMediaPlaybackLinkQuery.netEaseMusicBundleIdentifier:
+                let url = NetEaseMusicPlaybackQueue.playingListURL(
+                    homeDirectory: homeDirectory
+                )
+                guard let data = try? Data(contentsOf: url, options: [.mappedIfSafe]) else {
+                    return nil
+                }
+                return NetEaseMusicPlaybackQueue.resolveArtworkURL(query: query, data: data)
+
+            default:
+                return nil
             }
-            return NetEaseMusicPlaybackQueue.resolveArtworkURL(query: query, data: data)
         }
         let artworkURL = await withTaskCancellationHandler(
             operation: { await task.value },
             onCancel: { task.cancel() }
         )
         guard !Task.isCancelled, let artworkURL else { return nil }
-        return await netEaseMusicArtworkLoader(artworkURL)
+        switch query.applicationIdentifier {
+        case CompanionMediaPlaybackLinkQuery.qqMusicBundleIdentifier:
+            return await qqMusicArtworkLoader(artworkURL)
+        case CompanionMediaPlaybackLinkQuery.netEaseMusicBundleIdentifier:
+            return await netEaseMusicArtworkLoader(artworkURL)
+        default:
+            return nil
+        }
     }
 
     private nonisolated static func resolve(
@@ -109,49 +133,13 @@ actor CompanionMediaPlaybackLinkResolver: CompanionMediaPlaybackLinkResolving {
     ) async -> URL? {
         switch query.applicationIdentifier {
         case CompanionMediaPlaybackLinkQuery.qqMusicBundleIdentifier:
-            let applicationSupportURL = homeDirectory
-                .appendingPathComponent("Library", isDirectory: true)
-                .appendingPathComponent("Containers", isDirectory: true)
-                .appendingPathComponent("com.tencent.QQMusicMac", isDirectory: true)
-                .appendingPathComponent("Data", isDirectory: true)
-                .appendingPathComponent("Library", isDirectory: true)
-                .appendingPathComponent("Application Support", isDirectory: true)
-                .appendingPathComponent("QQMusicMac", isDirectory: true)
-            let playingListURL = applicationSupportURL
-                .appendingPathComponent("iTemp", isDirectory: true)
-                .appendingPathComponent("PlayingList.archive", isDirectory: false)
-            if let data = try? Data(contentsOf: playingListURL, options: [.mappedIfSafe]),
-               let url = QQMusicPlaybackQueue.resolve(query: query, archiveData: data)
-            {
-                return url
-            }
-            if let url = QQMusicSongDatabase.resolve(
+            guard let track = await resolveQQMusicTrack(
                 query: query,
-                databaseURL: applicationSupportURL.appendingPathComponent(
-                    "qqmusic.sqlite",
-                    isDirectory: false
-                )
-            ) {
-                return url
-            }
-
-            let songMIDs = QQMusicAutoMixCache.recentSongMIDs(
-                directoryURL: applicationSupportURL.appendingPathComponent(
-                    "AutoMixMir",
-                    isDirectory: true
-                )
+                homeDirectory: homeDirectory,
+                qqMusicSongDetailsLoader: qqMusicSongDetailsLoader
             )
-            guard !songMIDs.isEmpty, !Task.isCancelled else { return nil }
-            let candidates = await qqMusicSongDetailsLoader(songMIDs)
-            guard !Task.isCancelled,
-                  let match = MediaPlaybackQueueMatcher.match(
-                    query: query,
-                    candidates: candidates
-                  )
-            else {
-                return nil
-            }
-            return CompanionMediaPlaybackURLPolicy.qqMusicURL(songMID: match.identifier)
+            else { return nil }
+            return CompanionMediaPlaybackURLPolicy.qqMusicURL(songMID: track.identifier)
 
         case CompanionMediaPlaybackLinkQuery.netEaseMusicBundleIdentifier:
             let url = NetEaseMusicPlaybackQueue.playingListURL(
@@ -165,6 +153,49 @@ actor CompanionMediaPlaybackLinkResolver: CompanionMediaPlaybackLinkResolving {
         default:
             return nil
         }
+    }
+
+    private nonisolated static func resolveQQMusicTrack(
+        query: CompanionMediaPlaybackLinkQuery,
+        homeDirectory: URL,
+        qqMusicSongDetailsLoader: QQMusicSongDetailsLoader
+    ) async -> MediaPlaybackQueueTrack? {
+        let applicationSupportURL = homeDirectory
+            .appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent("Containers", isDirectory: true)
+            .appendingPathComponent("com.tencent.QQMusicMac", isDirectory: true)
+            .appendingPathComponent("Data", isDirectory: true)
+            .appendingPathComponent("Library", isDirectory: true)
+            .appendingPathComponent("Application Support", isDirectory: true)
+            .appendingPathComponent("QQMusicMac", isDirectory: true)
+        let playingListURL = applicationSupportURL
+            .appendingPathComponent("iTemp", isDirectory: true)
+            .appendingPathComponent("PlayingList.archive", isDirectory: false)
+        if let data = try? Data(contentsOf: playingListURL, options: [.mappedIfSafe]),
+           let track = QQMusicPlaybackQueue.resolveTrack(query: query, archiveData: data)
+        {
+            return track
+        }
+        if let track = QQMusicSongDatabase.resolveTrack(
+            query: query,
+            databaseURL: applicationSupportURL.appendingPathComponent(
+                "qqmusic.sqlite",
+                isDirectory: false
+            )
+        ) {
+            return track
+        }
+
+        let songMIDs = QQMusicAutoMixCache.recentSongMIDs(
+            directoryURL: applicationSupportURL.appendingPathComponent(
+                "AutoMixMir",
+                isDirectory: true
+            )
+        )
+        guard !songMIDs.isEmpty, !Task.isCancelled else { return nil }
+        let candidates = await qqMusicSongDetailsLoader(songMIDs)
+        guard !Task.isCancelled else { return nil }
+        return MediaPlaybackQueueMatcher.match(query: query, candidates: candidates)
     }
 }
 
@@ -237,6 +268,7 @@ enum QQMusicSongDetails {
         }
 
         struct Album: Decodable {
+            let mid: String?
             let name: String?
         }
 
@@ -307,7 +339,8 @@ enum QQMusicSongDetails {
                 title: title,
                 artists: song.singer?.compactMap(\.name) ?? [],
                 album: song.album?.name,
-                durationSeconds: song.interval.flatMap { $0 > 0 ? Double($0) : nil }
+                durationSeconds: song.interval.flatMap { $0 > 0 ? Double($0) : nil },
+                artworkURL: QQMusicArtworkURLPolicy.url(albumMID: song.album?.mid)
             )
         }
     }
@@ -315,7 +348,8 @@ enum QQMusicSongDetails {
 
 enum QQMusicSongDatabase {
     private static let query = """
-        SELECT id, name, singer, album, K_SONG_RESERVE1, K_SONG_RESERVE12
+        SELECT id, name, singer, album, K_SONG_RESERVE1, K_SONG_RESERVE12,
+               K_SONG_RESERVE9
         FROM SONGS
         WHERE name = ? COLLATE NOCASE
           AND K_SONG_RESERVE1 <> ''
@@ -326,10 +360,10 @@ enum QQMusicSongDatabase {
         to: sqlite3_destructor_type.self
     )
 
-    static func resolve(
+    static func resolveTrack(
         query playbackQuery: CompanionMediaPlaybackLinkQuery,
         databaseURL: URL
-    ) -> URL? {
+    ) -> MediaPlaybackQueueTrack? {
         guard databaseURL.isFileURL else { return nil }
 
         var database: OpaquePointer?
@@ -383,7 +417,10 @@ enum QQMusicSongDatabase {
                     album: album,
                     durationSeconds: durationMilliseconds > 0
                         ? Double(durationMilliseconds) / 1_000
-                        : nil
+                        : nil,
+                    artworkURL: QQMusicArtworkURLPolicy.url(
+                        albumMID: text(in: statement, column: 6)
+                    )
                 )
             )
         }
@@ -394,7 +431,7 @@ enum QQMusicSongDatabase {
         ) else {
             return nil
         }
-        return CompanionMediaPlaybackURLPolicy.qqMusicURL(songMID: match.identifier)
+        return match
     }
 
     private static func text(
@@ -547,6 +584,16 @@ enum QQMusicPlaybackQueue {
         query: CompanionMediaPlaybackLinkQuery,
         archiveData: Data
     ) -> URL? {
+        guard let match = resolveTrack(query: query, archiveData: archiveData) else {
+            return nil
+        }
+        return CompanionMediaPlaybackURLPolicy.qqMusicURL(songMID: match.identifier)
+    }
+
+    static func resolveTrack(
+        query: CompanionMediaPlaybackLinkQuery,
+        archiveData: Data
+    ) -> MediaPlaybackQueueTrack? {
         guard let songs = decodeSongs(from: archiveData) else { return nil }
         let candidates = songs.compactMap { song -> MediaPlaybackQueueTrack? in
             guard song.songID > 0,
@@ -561,13 +608,13 @@ enum QQMusicPlaybackQueue {
                 title: title,
                 artists: song.singers.compactMap(\.name),
                 album: song.album?.name,
-                durationSeconds: song.durationSeconds.map(Double.init)
+                durationSeconds: song.durationSeconds.map(Double.init),
+                artworkURL: QQMusicArtworkURLPolicy.url(
+                    albumMID: song.album?.albumMID
+                )
             )
         }
-        guard let match = MediaPlaybackQueueMatcher.match(query: query, candidates: candidates) else {
-            return nil
-        }
-        return CompanionMediaPlaybackURLPolicy.qqMusicURL(songMID: match.identifier)
+        return MediaPlaybackQueueMatcher.match(query: query, candidates: candidates)
     }
 
     private static func decodeSongs(from data: Data) -> [QQMusicArchivedSong]? {
@@ -689,19 +736,23 @@ final class QQMusicArchivedAlbum: NSObject, NSSecureCoding {
     static var supportsSecureCoding: Bool { true }
 
     let name: String?
+    let albumMID: String?
 
-    init(name: String?) {
+    init(name: String?, albumMID: String? = nil) {
         self.name = name
+        self.albumMID = albumMID
         super.init()
     }
 
     required init?(coder: NSCoder) {
         name = coder.decodeObject(of: NSString.self, forKey: "name") as String?
+        albumMID = coder.decodeObject(of: NSString.self, forKey: "albumMid") as String?
         super.init()
     }
 
     func encode(with coder: NSCoder) {
         coder.encode(name, forKey: "name")
+        coder.encode(albumMID, forKey: "albumMid")
     }
 }
 
@@ -800,14 +851,76 @@ enum NetEaseMusicArtworkURLPolicy {
     }
 }
 
-enum NetEaseMusicArtworkDownloader {
-    private static let maximumResponseBytes = 4 * 1_024 * 1_024
+enum QQMusicArtworkURLPolicy {
+    private static let host = "y.gtimg.cn"
+    private static let identifierLength = 14
 
+    static func url(albumMID: String?) -> URL? {
+        guard let albumMID,
+              albumMID.count == identifierLength,
+              albumMID.unicodeScalars.allSatisfy({ scalar in
+                  scalar.isASCII && CharacterSet.alphanumerics.contains(scalar)
+              })
+        else {
+            return nil
+        }
+
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = host
+        components.path = "/music/photo_new/T002R512x512M000\(albumMID).jpg"
+        return components.url
+    }
+
+    static func isAllowed(_ url: URL) -> Bool {
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              components.scheme == "https",
+              components.host?.lowercased() == host,
+              components.user == nil,
+              components.password == nil,
+              components.port == nil,
+              components.query == nil,
+              components.fragment == nil
+        else {
+            return false
+        }
+
+        let prefix = "/music/photo_new/T002R512x512M000"
+        guard components.percentEncodedPath.hasPrefix(prefix),
+              components.percentEncodedPath.hasSuffix(".jpg")
+        else {
+            return false
+        }
+        let identifier = components.percentEncodedPath
+            .dropFirst(prefix.count)
+            .dropLast(4)
+        return identifier.count == identifierLength
+            && identifier.unicodeScalars.allSatisfy { scalar in
+                scalar.isASCII && CharacterSet.alphanumerics.contains(scalar)
+            }
+    }
+}
+
+enum QQMusicArtworkDownloader {
+    static func fetch(from url: URL) async -> Data? {
+        guard QQMusicArtworkURLPolicy.isAllowed(url) else { return nil }
+        return await RemoteMediaArtworkDownloader.fetch(from: url)
+    }
+}
+
+enum NetEaseMusicArtworkDownloader {
     static func fetch(from url: URL) async -> Data? {
         guard NetEaseMusicArtworkURLPolicy.normalizedURL(url.absoluteString) == url else {
             return nil
         }
+        return await RemoteMediaArtworkDownloader.fetch(from: url)
+    }
+}
 
+private enum RemoteMediaArtworkDownloader {
+    private static let maximumResponseBytes = 4 * 1_024 * 1_024
+
+    static func fetch(from url: URL) async -> Data? {
         var request = URLRequest(
             url: url,
             cachePolicy: .returnCacheDataElseLoad,

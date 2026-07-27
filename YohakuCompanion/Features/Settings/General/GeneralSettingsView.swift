@@ -89,13 +89,9 @@ struct GeneralSettingsView: View {
 
                 CapabilityRow(
                     title: "Media Provider",
-                    detail: store.mediaHelperInstalled
-                        ? "The optional media-control enrichment provider is available."
-                        : "The built-in provider is ready; media-control can add richer metadata.",
-                    status: store.mediaHelperInstalled ? "Enhanced" : "Ready",
-                    symbolName: "waveform.circle.fill",
-                    actionTitle: store.mediaHelperInstalled ? nil : "Learn More…",
-                    action: store.openMediaHelperProject
+                    detail: "Built-in MediaRemote capture is ready; supported players are enriched from their local application data.",
+                    status: "Ready",
+                    symbolName: "waveform.circle.fill"
                 )
 
                 SettingsDivider()

@@ -25,7 +25,7 @@ enum DiscordTransportContract {
         return value
     }
 
-    /// Social SDK assets accept either an uploaded asset identifier or a public
+    /// Discord activity assets accept either an uploaded asset identifier or a public
     /// HTTPS image URL. Rejecting other URL schemes keeps the optional external
     /// image path aligned with the application's network privacy boundary.
     static func assetIdentifier(_ value: String?) -> String? {

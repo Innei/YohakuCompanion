@@ -32,7 +32,6 @@ case "$DISTRIBUTION_MODE" in
     ;;
 esac
 
-DISCORD_BINARY="$APP_PATH/Contents/Frameworks/libdiscord_partner_sdk.dylib"
 SPARKLE_FRAMEWORK="$APP_PATH/Contents/Frameworks/Sparkle.framework"
 SPARKLE_VERSION="$SPARKLE_FRAMEWORK/Versions/Current"
 SPARKLE_BINARY="$SPARKLE_VERSION/Sparkle"
@@ -47,7 +46,6 @@ APP_BINARY="$APP_PATH/Contents/MacOS/YohakuCompanion"
 
 BINARIES=(
   "$APP_BINARY"
-  "$DISCORD_BINARY"
   "$SPARKLE_BINARY"
   "$AUTOUPDATE_BINARY"
   "$UPDATER_BINARY"
@@ -107,7 +105,6 @@ sign_code "$UPDATER_APP"
 sign_code "$DOWNLOADER_XPC"
 sign_code "$INSTALLER_XPC"
 sign_code "$SPARKLE_FRAMEWORK"
-sign_code "$DISCORD_BINARY"
 sign_code "$APP_PATH"
 
 for binary in "${BINARIES[@]}"; do

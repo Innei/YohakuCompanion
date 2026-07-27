@@ -29,7 +29,6 @@ final class SettingsStore: ObservableObject {
     @Published private(set) var ignoreMissingArtist: Bool
     @Published private(set) var launchAtLoginEnabled = false
     @Published private(set) var accessibilityGranted = false
-    @Published private(set) var mediaHelperInstalled = false
     @Published private(set) var credentialsReady: Bool
     @Published private(set) var credentialStoreUnavailable = false
     @Published private(set) var credentialWarning: String?
@@ -146,7 +145,6 @@ final class SettingsStore: ObservableObject {
     func refreshCapabilities() {
         reportingEnabled = PreferencesDataModel.reportingAllowed
         accessibilityGranted = ApplicationMonitor.shared.isAccessibilityEnabled()
-        mediaHelperInstalled = CLIMediaInfoProvider.isMediaControlInstalled()
         launchAtLoginEnabled = SMAppService.mainApp.status == .enabled
         credentialsReady = PreferencesDataModel.integrationCredentialsReady.value
         credentialStoreUnavailable = PreferencesDataModel.integrationCredentialStoreUnavailable
@@ -268,11 +266,6 @@ final class SettingsStore: ObservableObject {
         guard let url = URL(
             string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension"
         ) else { return }
-        NSWorkspace.shared.open(url)
-    }
-
-    func openMediaHelperProject() {
-        guard let url = URL(string: "https://github.com/ungive/media-control") else { return }
         NSWorkspace.shared.open(url)
     }
 
@@ -1083,14 +1076,18 @@ final class SettingsStore: ObservableObject {
         let savedIntegration = PreferencesDataModel.discordIntegration.value
         try? await DiscordClientProvider.shared.clearActivity()
         DiscordClientProvider.shared.shutdown()
-        DiscordClientProvider.shared.initialize(applicationId: integration.applicationId)
-        try await Task.sleep(for: .milliseconds(750))
+        do {
+            try await DiscordClientProvider.shared.initialize(
+                applicationId: integration.applicationId
+            )
+        } catch {
+            await restoreDiscordConnection(savedIntegration)
+            throw DestinationSettingsError.providerMessage(error.localizedDescription)
+        }
         guard DiscordClientProvider.shared.isConnected else {
-            restoreDiscordConnection(savedIntegration)
+            await restoreDiscordConnection(savedIntegration)
             throw DestinationSettingsError.providerMessage(
-                DiscordClientProvider.shared is NoopDiscordClient
-                    ? "Discord SDK is unavailable"
-                    : "Discord is not running or rejected the Application ID"
+                "Discord is not running or rejected the Application ID"
             )
         }
         do {
@@ -1123,24 +1120,26 @@ final class SettingsStore: ObservableObject {
             )
         } catch {
             DiscordClientProvider.shared.shutdown()
-            restoreDiscordConnection(savedIntegration)
+            await restoreDiscordConnection(savedIntegration)
             throw error
         }
         do {
             try await DiscordClientProvider.shared.clearActivity()
         } catch {
             DiscordClientProvider.shared.shutdown()
-            restoreDiscordConnection(savedIntegration)
+            await restoreDiscordConnection(savedIntegration)
             throw error
         }
         DiscordClientProvider.shared.shutdown()
-        restoreDiscordConnection(savedIntegration)
+        await restoreDiscordConnection(savedIntegration)
         return "Discord accepted and then cleared the temporary Rich Presence."
     }
 
-    private func restoreDiscordConnection(_ integration: DiscordIntegration) {
+    private func restoreDiscordConnection(_ integration: DiscordIntegration) async {
         guard integration.isEnabled, integration.isValidPresenceDestination else { return }
-        DiscordClientProvider.shared.initialize(applicationId: integration.applicationId)
+        try? await DiscordClientProvider.shared.initialize(
+            applicationId: integration.applicationId
+        )
     }
 
     private func renderSlackDraft(
