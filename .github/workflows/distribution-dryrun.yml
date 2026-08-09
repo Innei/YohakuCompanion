@@ -90,14 +90,13 @@ jobs:
           echo "identity=$SIGNING_IDENTITY" >> "$GITHUB_OUTPUT"
 
       - name: Report certificate expiry
+        env:
+          KEYCHAIN_PATH: ${{ steps.signing.outputs.keychain_path }}
         shell: bash
         run: |
           set -euo pipefail
-          openssl pkcs12 -in "$RUNNER_TEMP/developer-id.p12" -nodes \
-            -passin pass:"$P12_PASSWORD" 2>/dev/null \
-            | openssl x509 -noout -fingerprint -sha1 -enddate -subject
-        env:
-          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          security find-certificate -c "Developer ID Application" -p "$KEYCHAIN_PATH" \
+            | openssl x509 -noout -subject -fingerprint -sha1 -enddate
 
       - name: Archive and export arm64 application
         env:

@@ -34,11 +34,13 @@ Keychain Access is the reliable path; `security export` cannot select a single i
 Verify the exported file is the intended certificate and carries its private key:
 
 ```bash
-openssl pkcs12 -in "$P12" -nodes -passin pass:"$P12_PASSWORD" 2>/dev/null \
-  | openssl x509 -noout -fingerprint -sha1 -enddate
+openssl pkcs12 -in "$P12" -nodes -legacy -passin pass:"$P12_PASSWORD" 2>/dev/null \
+  | openssl x509 -noout -subject -fingerprint -sha1 -enddate
 ```
 
-The fingerprint must match the SHA-1 hash selected in step 1.
+`-legacy` is required. Keychain Access encrypts exported `.p12` files with RC2-40-CBC, which OpenSSL 3 refuses to load from its default provider; without the flag the command reports `Could not find certificate from <stdin>` even for a valid export.
+
+The fingerprint must match the SHA-1 hash selected in step 1, and the subject must begin with `CN=Developer ID Application:`. An `Apple Distribution` certificate carries the same team ID and is easy to select by mistake, but it is an App Store submission identity and cannot sign a Developer ID artifact.
 
 ## 3. Issue the notarization key
 
