@@ -1846,9 +1846,9 @@ enum CredentialStore {
         serviceName: String
     ) -> [String: Any] {
         let authenticationContext = LAContext()
-        // YohakuCompanion is also distributed with ad-hoc signing while the
-        // Developer ID certificate is unavailable. Never let an inaccessible
-        // Keychain item stall application bootstrap behind an authentication UI.
+        // An item written by an earlier ad-hoc installation carries an ACL no
+        // current signature satisfies. Never let such an item stall application
+        // bootstrap behind an authentication UI.
         authenticationContext.interactionNotAllowed = true
 
         return [
