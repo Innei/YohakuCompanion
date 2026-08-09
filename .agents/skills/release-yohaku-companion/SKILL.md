@@ -5,7 +5,7 @@ description: Prepare and publish a production Yohaku Companion macOS release. Us
 
 # Release Yohaku Companion
 
-Produce one auditable release commit and annotated tag. Let GitHub Actions own the deterministic Apple Silicon arm64 build, distribution signing mode, DMG creation, Sparkle EdDSA appcast, and GitHub Release publication. Developer ID signing and notarization are preferred but optional until Apple credentials are available.
+Produce one auditable release commit and annotated tag. Let GitHub Actions own the deterministic Apple Silicon arm64 build, Developer ID signing, Apple notarization, DMG creation, Sparkle EdDSA appcast, and GitHub Release publication. Every release is Developer ID signed and notarized; there is no unsigned or ad-hoc distribution path.
 
 ## Safety contract
 
@@ -28,19 +28,23 @@ The release job always requires this stable Sparkle key pair, either as reposito
 
 Generate a Yohaku Companion-specific Sparkle pair once, back it up securely, and reuse it for every release. Never copy ProcessReporter’s pair and never generate a new key in CI. This key pair does not require an Apple developer account.
 
-Developer ID distribution uses the following optional, all-or-none group:
+Developer ID distribution additionally requires all five of the following. The release job fails immediately when any one is missing; distribution never degrades to an unsigned artifact.
 
 | Secret | Content |
 | --- | --- |
-| `BUILD_CERTIFICATE_BASE64` | Base64-encoded Developer ID Application `.p12` |
+| `BUILD_CERTIFICATE_BASE64` | Base64-encoded Developer ID Application `.p12` for team `KAMM5N88X3` |
 | `P12_PASSWORD` | Password for the `.p12` |
 | `NOTARY_PRIVATE_KEY_BASE64` | Base64-encoded App Store Connect API `.p8` |
 | `NOTARY_KEY_ID` | App Store Connect API key ID |
 | `NOTARY_ISSUER_ID` | App Store Connect issuer ID |
 
-When all five Apple secrets are absent, the workflow publishes an ad-hoc-signed, unnotarized application and places a visible warning in both the GitHub Release and Sparkle notes. The warning must state that Gatekeeper and Accessibility approval may need to be granted again because ad-hoc identity is not stable across builds. In this mode, integration credentials remain in a permissions-restricted local credential journal; the first stable team-signed build migrates them to Keychain. When all five Apple secrets are present, the workflow automatically performs Developer ID signing and notarization. A partial Apple configuration is invalid and must stop the release. Protect `v*` tags from deletion or force updates.
+The notarization key must be a **Team Key** issued at App Store Connect → Users and Access → Integrations → App Store Connect API → Team Keys. The `Developer` role is sufficient. Individual keys are not accepted by `notarytool`.
 
-Leave the repository or environment variable `REQUIRE_DEVELOPER_ID` unset (or set to `false`) while Apple credentials are unavailable. After the first Developer ID release, set it permanently to `true`; this prevents accidental credential deletion from silently downgrading later releases to ad-hoc signing.
+`DEVELOPMENT_TEAM` in `project.pbxproj` and `teamID` in `ExportOptions.plist` must both match the team that issued the certificate. A mismatch fails at `xcodebuild -exportArchive` with no signing certificate found.
+
+See `references/developer-id-provisioning.md` for certificate selection and export, API key issuance, the local distribution rehearsal, and the commands that store these secrets. Rehearse locally before the first release on a new certificate or key.
+
+Protect `v*` tags from deletion or force updates.
 
 ## Release workflow
 
@@ -109,7 +113,7 @@ rtk git tag -a vX.Y.Z -m "Yohaku Companion vX.Y.Z"
 rtk git push --atomic origin main vX.Y.Z
 ```
 
-Do not create the GitHub Release manually. The tag-triggered workflow selects Developer ID or ad-hoc distribution from the available Apple secrets, creates a hidden draft, validates the arm64-only application, generates an appcast whose DMG enclosure has a Sparkle EdDSA signature, publishes the release, and explicitly repairs GitHub's `latest` pointer. The Developer ID branch additionally validates the notarized application and DMG.
+Do not create the GitHub Release manually. The tag-triggered workflow verifies that all distribution credentials are present, creates a hidden draft, validates the arm64-only hardened-runtime application, notarizes and staples both the application and the DMG, generates an appcast whose DMG enclosure has a Sparkle EdDSA signature, publishes the release, and explicitly repairs GitHub's `latest` pointer.
 
 ### 6. Monitor the real endpoint
 
@@ -119,7 +123,6 @@ Watch the `Release` Actions run through completion. Confirm all of the following
 - The Release is public, non-prerelease, and marked latest.
 - The DMG, `appcast.xml`, checksum-covered Markdown notes, and `SHA256SUMS.txt` exist.
 - The latest appcast references the new tag, marketing version, build number, and an EdDSA signature.
-- The published notes accurately state whether the artifact is Developer ID notarized or ad-hoc signed.
 - The asset URLs return successfully.
 
 If Actions fails, preserve the immutable tag, report the failing stage and evidence, and fix forward with explicit user direction. Do not silently republish different bytes under an already public version.

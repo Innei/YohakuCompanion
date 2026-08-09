@@ -88,7 +88,7 @@ The built-in media provider works without additional software. On macOS 15.4 or 
 Supported Core versions expose Live Desk without a server feature flag. Pairing codes expire after ten minutes and can be used only once.
 
 > [!IMPORTANT]
-> Consult the release notes for the artifact's signing status. Until Developer ID credentials are enabled, releases are ad-hoc signed and macOS may require **Open Anyway** on first launch. An update may also require Accessibility permission to be granted again because an ad-hoc identity is not stable across builds.
+> Releases are Developer ID signed and notarized by Apple, so first launch requires no Gatekeeper override. Upgrading from v1.8.6 or earlier is the one exception: the signing identity changed with v1.9.0, so macOS discards the previous Accessibility approval and it must be granted again once.
 
 ## Optional Bridges and local audit
 

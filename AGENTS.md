@@ -34,4 +34,4 @@ Use behavior-oriented harnesses from `scripts/` for protocol, connection, lifecy
 
 ## Release
 
-Use `.agents/skills/release-yohaku-companion/SKILL.md`. Releases require the repository-specific Sparkle key pair; Apple Developer ID credentials are optional until the project explicitly requires notarized distribution.
+Use `.agents/skills/release-yohaku-companion/SKILL.md`. Releases require both the repository-specific Sparkle key pair and the five Apple Developer ID and notarization secrets. A release with any of them missing fails rather than producing an unsigned artifact.

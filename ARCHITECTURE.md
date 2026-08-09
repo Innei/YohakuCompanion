@@ -219,7 +219,7 @@ Settings export excludes credentials and retains legacy Filter and Mapping field
 
 ## Credential Authority
 
-Destination secrets use `CredentialStore`, backed by Keychain for stable signed builds and a protected local journal when Keychain identity is unavailable. The service and journal directory are derived from the active Yohaku Companion bundle identifier, preventing accidental access to ProcessReporter credentials. Preference values are redacted. Multi-field changes are coordinated through `SettingsMutationCoordinator` and the credential journal so partial UI updates cannot become the authority. Reset and erase run as exclusive maintenance transactions that close mutation admission until completion.
+Destination secrets use `CredentialStore`, backed by Keychain for stable signed builds and a protected local journal when Keychain identity is unavailable. Distributed artifacts are always Developer ID signed, so Keychain is the normal authority and the journal is a degraded path reached only by unsigned local builds or a Keychain failure. A build that gains a team identity migrates existing journal values into Keychain on the next credential resolution. The service and journal directory are derived from the active Yohaku Companion bundle identifier, preventing accidental access to ProcessReporter credentials. Preference values are redacted. Multi-field changes are coordinated through `SettingsMutationCoordinator` and the credential journal so partial UI updates cannot become the authority. Reset and erase run as exclusive maintenance transactions that close mutation admission until completion.
 
 If the protected journal is unreadable, reporting fails closed. Recovery preserves the unreadable store before any re-entry workflow.
 

@@ -8,7 +8,8 @@ Yohaku Companion is a macOS menu-bar companion for Yohaku. Its central correctne
 - macOS 15.0 or later.
 - Xcode 16.2 or later.
 - Swift Package Manager dependencies resolved by Xcode.
-- A signing identity for interactive Keychain and Accessibility testing.
+- A team signing identity for interactive Keychain and Accessibility testing. `CredentialStore` selects Keychain storage only when the running binary carries a team identifier; an unsigned or ad-hoc build exercises the protected journal path instead.
+- A Developer ID Application certificate for team `KAMM5N88X3` to reproduce a distribution build locally.
 
 Accessibility is optional at the product level and is required only for window-title capture. Application identity and media synchronization must remain usable without it.
 
@@ -364,6 +365,8 @@ Use a new identifier for every migration fixture when `cfprefsd` caching could i
 Production publication requires signing, notarization, a valid Sparkle feed, and an EdDSA public key. Use the repository release procedure rather than ad hoc archive commands. A build without valid Sparkle metadata intentionally disables update checks.
 
 The Yohaku Companion repository must be provisioned with its own Sparkle EdDSA key pair. Configure the repository-scoped `SPARKLE_PRIVATE_KEY` and `SPARKLE_PUBLIC_ED_KEY` secrets together; do not copy the ProcessReporter signing identity. The workflow verifies that the pair matches before publishing an appcast.
+
+Distribution additionally requires `BUILD_CERTIFICATE_BASE64`, `P12_PASSWORD`, `NOTARY_PRIVATE_KEY_BASE64`, `NOTARY_KEY_ID`, and `NOTARY_ISSUER_ID`. The release job validates all seven secrets before building and fails when any is absent; there is no unsigned fallback. `DEVELOPMENT_TEAM` and `ExportOptions.plist` must name the same team as the certificate.
 
 The release workflow runs `scripts/prepare_arm64_app.sh` after export. This removes Intel slices from precompiled dependencies such as Sparkle and re-signs nested code from the inside out before notarization or DMG creation. A plain Xcode arm64 build is not sufficient evidence that every embedded binary is arm64-only.
 

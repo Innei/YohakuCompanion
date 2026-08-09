@@ -135,8 +135,7 @@ jobs:
           xcodebuild -version
           swift --version
 
-      - name: Select distribution mode
-        id: distribution
+      - name: Require distribution credentials
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
           P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
@@ -145,60 +144,21 @@ jobs:
           NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
           SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
-          REQUIRE_DEVELOPER_ID: ${{ vars.REQUIRE_DEVELOPER_ID }}
         shell: bash
         run: |
           set -euo pipefail
+          : "${BUILD_CERTIFICATE_BASE64:?Missing BUILD_CERTIFICATE_BASE64}"
+          : "${P12_PASSWORD:?Missing P12_PASSWORD}"
+          : "${NOTARY_PRIVATE_KEY_BASE64:?Missing NOTARY_PRIVATE_KEY_BASE64}"
+          : "${NOTARY_KEY_ID:?Missing NOTARY_KEY_ID}"
+          : "${NOTARY_ISSUER_ID:?Missing NOTARY_ISSUER_ID}"
           : "${SPARKLE_PRIVATE_KEY:?Missing SPARKLE_PRIVATE_KEY}"
           : "${SPARKLE_PUBLIC_ED_KEY:?Missing SPARKLE_PUBLIC_ED_KEY}"
-          case "${REQUIRE_DEVELOPER_ID:-false}" in
-            true | false) ;;
-            *)
-              echo "REQUIRE_DEVELOPER_ID must be true or false when configured." >&2
-              exit 1
-              ;;
-          esac
-
-          APPLE_SECRET_COUNT=0
-          for VALUE in \
-            "$BUILD_CERTIFICATE_BASE64" \
-            "$P12_PASSWORD" \
-            "$NOTARY_PRIVATE_KEY_BASE64" \
-            "$NOTARY_KEY_ID" \
-            "$NOTARY_ISSUER_ID"
-          do
-            [[ -z "$VALUE" ]] || APPLE_SECRET_COUNT=$((APPLE_SECRET_COUNT + 1))
-          done
-
-          case "$APPLE_SECRET_COUNT" in
-            0)
-              if [[ "${REQUIRE_DEVELOPER_ID:-false}" == "true" ]]; then
-                echo "Developer ID distribution is required, but Apple credentials are absent." >&2
-                exit 1
-              fi
-              echo "mode=adhoc" >> "$GITHUB_OUTPUT"
-              {
-                echo "### Distribution mode: ad-hoc"
-                echo
-                echo "Apple Developer ID credentials are absent. The application will be"
-                echo "ad-hoc signed and will not be submitted for notarization."
-              } >> "$GITHUB_STEP_SUMMARY"
-              ;;
-            5)
-              echo "mode=developer-id" >> "$GITHUB_OUTPUT"
-              echo "### Distribution mode: Developer ID + notarization" >> "$GITHUB_STEP_SUMMARY"
-              ;;
-            *)
-              echo "Apple signing credentials are only partially configured." >&2
-              echo "Provide all five Developer ID/notary secrets or leave all five empty." >&2
-              exit 1
-              ;;
-          esac
+          echo "### Distribution: Developer ID + notarization" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Prepare isolated release keychain
         id: signing
         env:
-          DISTRIBUTION_MODE: ${{ steps.distribution.outputs.mode }}
           BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
           P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
         shell: bash
@@ -213,10 +173,6 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
           security default-keychain -d user -s "$KEYCHAIN_PATH"
           echo "keychain_path=$KEYCHAIN_PATH" >> "$GITHUB_OUTPUT"
-
-          if [[ "$DISTRIBUTION_MODE" != "developer-id" ]]; then
-            exit 0
-          fi
 
           : "${BUILD_CERTIFICATE_BASE64:?Missing BUILD_CERTIFICATE_BASE64}"
           : "${P12_PASSWORD:?Missing P12_PASSWORD}"
@@ -235,7 +191,6 @@ jobs:
 
       - name: Archive and export arm64 application
         env:
-          DISTRIBUTION_MODE: ${{ steps.distribution.outputs.mode }}
           SIGNING_IDENTITY: ${{ steps.signing.outputs.identity }}
           SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
         shell: bash
@@ -245,59 +200,32 @@ jobs:
           rm -rf "$ARCHIVE_PATH" "$EXPORT_PATH" "$DIST_PATH"
           mkdir -p "$EXPORT_PATH" "$DIST_PATH"
 
-          if [[ "$DISTRIBUTION_MODE" == "developer-id" ]]; then
-            xcodebuild archive \
-              -project YohakuCompanion.xcodeproj \
-              -scheme YohakuCompanion \
-              -configuration Release \
-              -destination 'generic/platform=macOS' \
-              -archivePath "$ARCHIVE_PATH" \
-              -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_PATH" \
-              ARCHS=arm64 \
-              ONLY_ACTIVE_ARCH=NO \
-              CODE_SIGN_STYLE=Manual \
-              CODE_SIGN_IDENTITY="$SIGNING_IDENTITY" \
-              SPARKLE_FEED_URL="$SPARKLE_FEED_URL" \
-              SPARKLE_PUBLIC_ED_KEY="$SPARKLE_PUBLIC_ED_KEY"
+          xcodebuild archive \
+            -project YohakuCompanion.xcodeproj \
+            -scheme YohakuCompanion \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -archivePath "$ARCHIVE_PATH" \
+            -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_PATH" \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="$SIGNING_IDENTITY" \
+            SPARKLE_FEED_URL="$SPARKLE_FEED_URL" \
+            SPARKLE_PUBLIC_ED_KEY="$SPARKLE_PUBLIC_ED_KEY"
 
-            xcodebuild -exportArchive \
-              -archivePath "$ARCHIVE_PATH" \
-              -exportPath "$EXPORT_PATH" \
-              -exportOptionsPlist ExportOptions.plist
-          else
-            # Sparkle documents that ad-hoc signing and Library Validation are
-            # incompatible. Disable the hardened runtime only for this temporary
-            # unsigned distribution mode; Developer ID builds retain it.
-            xcodebuild archive \
-              -project YohakuCompanion.xcodeproj \
-              -scheme YohakuCompanion \
-              -configuration Release \
-              -destination 'generic/platform=macOS' \
-              -archivePath "$ARCHIVE_PATH" \
-              -clonedSourcePackagesDirPath "$SOURCE_PACKAGES_PATH" \
-              ARCHS=arm64 \
-              ONLY_ACTIVE_ARCH=NO \
-              CODE_SIGN_STYLE=Manual \
-              CODE_SIGN_IDENTITY=- \
-              DEVELOPMENT_TEAM= \
-              ENABLE_HARDENED_RUNTIME=NO \
-              SPARKLE_FEED_URL="$SPARKLE_FEED_URL" \
-              SPARKLE_PUBLIC_ED_KEY="$SPARKLE_PUBLIC_ED_KEY"
-
-            ditto \
-              "$ARCHIVE_PATH/Products/Applications/YohakuCompanion.app" \
-              "$EXPORT_PATH/YohakuCompanion.app"
-          fi
+          xcodebuild -exportArchive \
+            -archivePath "$ARCHIVE_PATH" \
+            -exportPath "$EXPORT_PATH" \
+            -exportOptionsPlist ExportOptions.plist
 
       - name: Remove Intel slices and re-sign application
         env:
-          DISTRIBUTION_MODE: ${{ steps.distribution.outputs.mode }}
           SIGNING_IDENTITY: ${{ steps.signing.outputs.identity }}
         run: bash scripts/prepare_arm64_app.sh "$EXPORT_PATH/YohakuCompanion.app"
 
       - name: Verify application signatures and architectures
         env:
-          DISTRIBUTION_MODE: ${{ steps.distribution.outputs.mode }}
           SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
         shell: bash
         run: |
@@ -325,16 +253,12 @@ jobs:
             }
           }
 
-          verify_signature_mode() {
+          verify_developer_id_signature() {
             local code_path="$1"
             local signature_info
             codesign --verify --strict --verbose=2 "$code_path"
             signature_info="$(codesign -dv --verbose=4 "$code_path" 2>&1)"
-            if [[ "$DISTRIBUTION_MODE" == "developer-id" ]]; then
-              grep -F "Authority=Developer ID Application:" <<< "$signature_info" >/dev/null
-            else
-              grep -F "Signature=adhoc" <<< "$signature_info" >/dev/null
-            fi
+            grep -F "Authority=Developer ID Application:" <<< "$signature_info" >/dev/null
           }
 
           test -d "$APP_PATH"
@@ -361,17 +285,15 @@ jobs:
             "$DOWNLOADER_XPC" \
             "$INSTALLER_XPC"
           do
-            verify_signature_mode "$CODE_PATH"
+            verify_developer_id_signature "$CODE_PATH"
           done
 
           SIGNATURE_INFO="$(codesign -dv --verbose=4 "$APP_PATH" 2>&1)"
           printf '%s\n' "$SIGNATURE_INFO"
 
-          if [[ "$DISTRIBUTION_MODE" == "adhoc" ]]; then
-            if grep -E 'CodeDirectory .*flags=.*runtime' <<< "$SIGNATURE_INFO" >/dev/null; then
-              echo "Ad-hoc builds must not enable the hardened runtime." >&2
-              exit 1
-            fi
+          if ! grep -E 'CodeDirectory .*flags=.*runtime' <<< "$SIGNATURE_INFO" >/dev/null; then
+            echo "Distribution builds must enable the hardened runtime." >&2
+            exit 1
           fi
 
           ACTUAL_VERSION="$(defaults read "$APP_PATH/Contents/Info" CFBundleShortVersionString)"
@@ -384,7 +306,6 @@ jobs:
           [[ "$ACTUAL_KEY" == "$SPARKLE_PUBLIC_ED_KEY" ]]
 
       - name: Notarize and staple application
-        if: steps.distribution.outputs.mode == 'developer-id'
         env:
           NOTARY_PRIVATE_KEY_BASE64: ${{ secrets.NOTARY_PRIVATE_KEY_BASE64 }}
           NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
@@ -442,7 +363,6 @@ jobs:
           trap - EXIT
 
       - name: Sign, notarize, and staple DMG
-        if: steps.distribution.outputs.mode == 'developer-id'
         env:
           SIGNING_IDENTITY: ${{ steps.signing.outputs.identity }}
           VERSION: ${{ steps.metadata.outputs.version }}
@@ -477,7 +397,6 @@ jobs:
           VERSION: ${{ steps.metadata.outputs.version }}
           BUILD_NUMBER: ${{ steps.metadata.outputs.build }}
           NOTES_FILE: ${{ steps.metadata.outputs.notes_file }}
-          DISTRIBUTION_MODE: ${{ steps.distribution.outputs.mode }}
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
           SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
         shell: bash
@@ -500,12 +419,6 @@ jobs:
           cp "$DIST_PATH/$DMG_NAME" "$UPDATES_PATH/$DMG_NAME"
           {
             echo "<!-- yohaku-companion-workflow-run: ${GITHUB_RUN_ID} -->"
-            if [[ "$DISTRIBUTION_MODE" == "adhoc" ]]; then
-              echo "<!-- yohaku-companion-signing-mode: ad-hoc -->"
-              echo "> [!WARNING]"
-              echo "> This build is ad-hoc signed and is not notarized by Apple. macOS may require explicit approval on first launch. Because ad-hoc identity is not stable across builds, an update may also require Accessibility permission to be granted again. Integration credentials remain in a permissions-restricted local credential journal until a stable Developer ID build can migrate them to Keychain. Sparkle update archives remain protected by the repository's EdDSA key."
-              echo
-            fi
             cat "$NOTES_FILE"
           } > "$UPDATES_PATH/$NOTES_NAME"
 
@@ -622,7 +535,6 @@ jobs:
           TAG: ${{ steps.metadata.outputs.tag }}
           VERSION: ${{ steps.metadata.outputs.version }}
           BUILD_NUMBER: ${{ steps.metadata.outputs.build }}
-          DISTRIBUTION_MODE: ${{ steps.distribution.outputs.mode }}
           REUSED_PUBLIC_RELEASE: ${{ steps.publish.outputs.reused_public }}
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -635,10 +547,6 @@ jobs:
           [[ "$(jq '.assets | length' <<< "$RELEASE_JSON")" == "4" ]]
           jq -r .body <<< "$RELEASE_JSON" | \
             grep -F "<!-- yohaku-companion-workflow-run: ${GITHUB_RUN_ID} -->" >/dev/null
-          if [[ "$DISTRIBUTION_MODE" == "adhoc" ]]; then
-            jq -r .body <<< "$RELEASE_JSON" | \
-              grep -F "<!-- yohaku-companion-signing-mode: ad-hoc -->" >/dev/null
-          fi
 
           RELEASE_ASSETS="$(jq -r '.assets[].name' <<< "$RELEASE_JSON")"
           for EXPECTED_ASSET in \
@@ -682,10 +590,8 @@ jobs:
             fi
           done
           hdiutil verify "$PUBLISHED_DIR/YohakuCompanion-v${VERSION}.dmg"
-          if [[ "$DISTRIBUTION_MODE" == "developer-id" ]]; then
-            spctl --assess --type open --context context:primary-signature \
-              --verbose=2 "$PUBLISHED_DIR/YohakuCompanion-v${VERSION}.dmg"
-          fi
+          spctl --assess --type open --context context:primary-signature \
+            --verbose=2 "$PUBLISHED_DIR/YohakuCompanion-v${VERSION}.dmg"
 
           PUBLISHED_APPCAST="$PUBLISHED_DIR/appcast.xml"
           PUBLISHED_BUILD="$(xmllint --xpath \

@@ -7,7 +7,6 @@ if [[ $# -ne 1 ]]; then
 fi
 
 APP_PATH="$1"
-DISTRIBUTION_MODE="${DISTRIBUTION_MODE:-adhoc}"
 SIGNING_IDENTITY="${SIGNING_IDENTITY:-}"
 
 if [[ ! -d "$APP_PATH" ]]; then
@@ -15,22 +14,10 @@ if [[ ! -d "$APP_PATH" ]]; then
   exit 1
 fi
 
-case "$DISTRIBUTION_MODE" in
-  adhoc)
-    SIGNING_TARGET=-
-    ;;
-  developer-id)
-    if [[ -z "$SIGNING_IDENTITY" ]]; then
-      echo "SIGNING_IDENTITY is required for Developer ID distribution." >&2
-      exit 1
-    fi
-    SIGNING_TARGET="$SIGNING_IDENTITY"
-    ;;
-  *)
-    echo "Unsupported distribution mode: $DISTRIBUTION_MODE" >&2
-    exit 1
-    ;;
-esac
+if [[ -z "$SIGNING_IDENTITY" ]]; then
+  echo "SIGNING_IDENTITY is required." >&2
+  exit 1
+fi
 
 SPARKLE_FRAMEWORK="$APP_PATH/Contents/Frameworks/Sparkle.framework"
 SPARKLE_VERSION="$SPARKLE_FRAMEWORK/Versions/Current"
@@ -80,18 +67,14 @@ thin_arm64() {
 }
 
 sign_code() {
-  local code_path="$1"
-  local arguments=(
-    --force
-    --sign "$SIGNING_TARGET"
-    --preserve-metadata=identifier,entitlements
-    --generate-entitlement-der
-  )
-
-  if [[ "$DISTRIBUTION_MODE" == "developer-id" ]]; then
-    arguments+=(--options runtime --timestamp)
-  fi
-  codesign "${arguments[@]}" "$code_path"
+  codesign \
+    --force \
+    --sign "$SIGNING_IDENTITY" \
+    --preserve-metadata=identifier,entitlements \
+    --generate-entitlement-der \
+    --options runtime \
+    --timestamp \
+    "$1"
 }
 
 for binary in "${BINARIES[@]}"; do
