@@ -127,6 +127,10 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
         playbackRate: playbackRate,
         playing: playing === null ? playbackRate !== null && playbackRate > 0 : playing,
         source: source,
+        timestamp: infoDateSeconds(
+          info,
+          "kMRMediaRemoteNowPlayingInfoTimestamp"
+        ),
         title: infoValue(info, "kMRMediaRemoteNowPlayingInfoTitle")
       }
     }
@@ -579,7 +583,10 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
       album: album,
       image: nonEmptyString(dictionary["artworkData"]),
       duration: numberValue(dictionary["duration"]),
-      elapsedTime: numberValue(dictionary["elapsedTime"]),
+      elapsedTime: MediaControlPlaybackTiming.currentPosition(
+        from: dictionary,
+        playing: playing
+      ),
       processID: runningApplication.map { Int($0.processIdentifier) } ?? 0,
       processName: runningApplication?.localizedName ?? "",
       executablePath: runningApplication?.executableURL?.path ?? "",

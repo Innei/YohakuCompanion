@@ -14,8 +14,7 @@ enum MediaInfoFetchResult: Sendable {
   case unavailable
 }
 
-/// Resolves the current position exposed by `media-control get`. Newer builds
-/// provide `elapsedTimeNow` when invoked with `--now`; older builds expose a
+/// Resolves a current playback position from either a live elapsed value or a
 /// captured elapsed value plus the wall-clock timestamp of that sample.
 enum MediaControlPlaybackTiming {
   static func currentPosition(
@@ -33,19 +32,30 @@ enum MediaControlPlaybackTiming {
         ?? nonNegativeSeconds(payload["elapsed"])
         ?? nonNegativeSeconds(payload["position"])
         ?? nonNegativeSeconds(payload["progressSeconds"])
+        ?? nonNegativeSeconds(
+          payload["kMRMediaRemoteNowPlayingInfoElapsedTime"]
+        )
     else {
       return nil
     }
 
     guard
       playing,
-      let capturedAt = timestamp(payload["timestamp"]),
-      now > capturedAt
+      let capturedAt = timestamp(
+        payload["timestamp"]
+          ?? payload["kMRMediaRemoteNowPlayingInfoTimestamp"]
+      )
     else {
       return captured
     }
 
-    let advanced = captured + now.timeIntervalSince(capturedAt)
+    let playbackRate =
+      nonNegativeSeconds(payload["playbackRate"])
+      ?? nonNegativeSeconds(
+        payload["kMRMediaRemoteNowPlayingInfoPlaybackRate"]
+      )
+      ?? 1
+    let advanced = captured + max(0, now.timeIntervalSince(capturedAt)) * playbackRate
     return advanced.isFinite ? advanced : captured
   }
 
@@ -79,6 +89,12 @@ enum MediaControlPlaybackTiming {
 
   private static func timestamp(_ value: Any?) -> Date? {
     if let date = value as? Date { return date }
+    if let number = value as? NSNumber {
+      let seconds = number.doubleValue
+      return seconds.isFinite && seconds >= 0
+        ? Date(timeIntervalSince1970: seconds)
+        : nil
+    }
     guard let string = value as? String, !string.isEmpty else { return nil }
 
     let formatter = ISO8601DateFormatter()

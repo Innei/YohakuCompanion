@@ -232,7 +232,10 @@ final class LegacyMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
       album: nonEmptyString(information["kMRMediaRemoteNowPlayingInfoAlbum"]),
       image: artwork,
       duration: numberValue(information["kMRMediaRemoteNowPlayingInfoDuration"]),
-      elapsedTime: numberValue(information["kMRMediaRemoteNowPlayingInfoElapsedTime"]),
+      elapsedTime: MediaControlPlaybackTiming.currentPosition(
+        from: information as? [String: Any] ?? [:],
+        playing: playing
+      ),
       processID: Int(normalizedProcessID),
       processName: application?.localizedName ?? "",
       executablePath: application?.executableURL?.path ?? "",

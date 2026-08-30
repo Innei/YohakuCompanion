@@ -82,6 +82,36 @@ private struct MediaTimingSemanticsHarness {
       ) == 5,
       "paused position advanced from its timestamp"
     )
+
+    let qqMusicSample: [String: Any] = [
+      "elapsedTime": 0.384,
+      "playbackRate": 1,
+      "timestamp": 970,
+    ]
+    try expect(
+      MediaControlPlaybackTiming.currentPosition(
+        from: qqMusicSample,
+        playing: true,
+        now: now
+      ).map { abs($0 - 30.384) < 0.001 } == true,
+      "QQ Music position was not projected from its MediaRemote timestamp"
+    )
+    try expect(
+      MediaControlPlaybackTiming.currentPosition(
+        from: qqMusicSample,
+        playing: false,
+        now: now
+      ) == 0.384,
+      "paused QQ Music position advanced from its MediaRemote timestamp"
+    )
+    try expect(
+      MediaControlPlaybackTiming.currentPosition(
+        from: ["playbackRate": 1, "timestamp": 970],
+        playing: true,
+        now: now
+      ) == nil,
+      "missing position was converted to zero during projection"
+    )
     try expect(
       MediaControlPlaybackTiming.currentPosition(
         from: ["elapsedTime": "01:02.5"],
