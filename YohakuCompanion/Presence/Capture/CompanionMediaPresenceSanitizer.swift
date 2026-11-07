@@ -6,6 +6,7 @@ enum CompanionMediaKindResolver {
         "com.netease.163music",
         "com.spotify.client",
         "com.tencent.QQMusicMac",
+        "dev.egoist.music",
     ]
 
     static func kind(applicationIdentifier: String?) -> CompanionMediaKind {
