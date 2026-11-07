@@ -21,6 +21,7 @@ final class JXAMediaInfoProvider: MediaInfoProvider, @unchecked Sendable {
   private static let supportedBundleIdentifiers = [
     "com.tencent.QQMusicMac",
     "com.netease.163music",
+    "dev.egoist.music",
   ]
 
   private static let script = #"""
